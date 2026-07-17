@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Was möchtest du machen?</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main class="card">
+        <p class="step">03 / 03</p>
+        <h1>Was möchtest du machen?</h1>
+        <p class="description">Du kannst mehrere Sachen auswählen.</p>
+
+        <form id="activity-form" class="form-stack">
+            <div class="activity-list">
+                <button class="activity-button" type="button" data-activity="Kino">Kino</button>
+                <button class="activity-button" type="button" data-activity="Café">Café</button>
+                <button class="activity-button" type="button" data-activity="Spazieren gehen">Spazieren gehen</button>
+                <button class="activity-button" type="button" data-activity="Etwas essen">Etwas essen</button>
+                <button class="activity-button" type="button" data-activity="Überrasch mich">Überrasch mich</button>
+                <button class="activity-button" type="button" data-activity="Etwas anderes">Etwas anderes</button>
+            </div>
+
+            <p id="activity-error" class="error-message" aria-live="polite"></p>
+            <button id="send-button" class="primary-button" type="submit">Schicken</button>
+        </form>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
