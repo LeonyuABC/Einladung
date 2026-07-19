@@ -14,6 +14,7 @@
         <form id="date-form" class="form-stack">
             <label class="field-label" for="date">Such dir einen Tag aus</label>
             <input class="date-input" id="date" name="date" type="date">
+            <p id="date-preview" class="date-preview" aria-live="polite"></p>
 
             <label class="choice-card delegate-choice">
                 <input id="delegate" name="delegate" type="checkbox">
@@ -24,10 +25,6 @@
                 <legend>Wann passt es dir besser?</legend>
                 <div class="time-options">
                     <label class="choice-pill">
-                        <input type="radio" name="time" value="Vormittags" required>
-                        <span>Vormittags</span>
-                    </label>
-                    <label class="choice-pill">
                         <input type="radio" name="time" value="Nachmittags" required>
                         <span>Nachmittags</span>
                     </label>
@@ -35,15 +32,20 @@
                         <input type="radio" name="time" value="Abends">
                         <span>Abends</span>
                     </label>
-<!--                    <label class="choice-pill">-->
-<!--                        <input type="radio" name="time" value="Egal">-->
-<!--                        <span>Egal</span>-->
-<!--                    </label>-->
+                    <label class="choice-pill">
+                        <input type="radio" name="time" value="Egal">
+                        <span>Egal</span>
+                    </label>
                 </div>
             </fieldset>
 
             <p id="date-error" class="error-message" aria-live="polite"></p>
             <button class="primary-button" type="submit">Weiter</button>
+
+            <div class="secondary-actions">
+                <a class="back-link" href="index.html">← Zurück</a>
+                <button id="skip-date" class="text-button" type="button">Überspringen</button>
+            </div>
         </form>
     </main>
 

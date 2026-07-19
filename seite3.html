@@ -14,16 +14,21 @@
 
         <form id="activity-form" class="form-stack">
             <div class="activity-list">
-                <button class="activity-button" type="button" data-activity="Etwas essen">Etwas essen</button>
-                <button class="activity-button" type="button" data-activity="Spazieren gehen">Spazieren gehen</button>
-                <button class="activity-button" type="button" data-activity="Ausflug">Ausflug</button>
-                <button class="activity-button" type="button" data-activity="Bibliothek">Bibliothek</button>
-                <button class="activity-button" type="button" data-activity="Etwas anderes">Etwas anderes</button>
-                <button class="activity-button" type="button" data-activity="Überrasch mich">Überrasch mich</button>
+                <button class="activity-button" type="button" data-activity="📖 Bibliothek">📖 Bibliothek</button>
+                <button class="activity-button" type="button" data-activity="🚅 Ausflug">🚅 Ausflug</button>
+                <button class="activity-button" type="button" data-activity="🚶️ Spazieren gehen">🚶️ Spazieren gehen</button>
+                <button class="activity-button" type="button" data-activity="🍕 Etwas essen">🍕 Etwas essen</button>
+                <button class="activity-button" type="button" data-activity="🎲 Überrasch mich">🎲 Überrasch mich</button>
+                <button class="activity-button" type="button" data-activity="✨ Etwas anderes">✨ Etwas anderes</button>
             </div>
 
             <p id="activity-error" class="error-message" aria-live="polite"></p>
             <button id="send-button" class="primary-button" type="submit">Schicken</button>
+
+            <div class="secondary-actions">
+                <a class="back-link" href="seite2.html">← Zurück</a>
+                <button id="skip-activities" class="text-button" type="button">Ohne Auswahl schicken</button>
+            </div>
         </form>
     </main>
 

@@ -79,6 +79,13 @@ h1 {
     cursor: not-allowed;
 }
 
+.date-preview {
+    min-height: 20px;
+    margin: -10px 0 0;
+    color: #b34f70;
+    font-size: 15px;
+}
+
 .choice-card {
     display: flex;
     justify-content: center;
@@ -193,6 +200,37 @@ h1 {
     transform: none;
 }
 
+.secondary-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    margin-top: -2px;
+}
+
+.back-link,
+.text-button {
+    padding: 5px 0;
+    border: 0;
+    background: transparent;
+    color: #9b7583;
+    font: inherit;
+    font-size: 14px;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.back-link:hover,
+.text-button:hover {
+    color: #bd4f72;
+    text-decoration: underline;
+}
+
+.text-button:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
 .error-message {
     min-height: 18px;
     margin: -6px 0;
@@ -203,12 +241,6 @@ h1 {
 .final-card {
     padding-top: 56px;
     padding-bottom: 56px;
-}
-
-.heart {
-    margin: 0 0 18px;
-    color: #d9688b;
-    font-size: 36px;
 }
 
 @media (max-width: 500px) {
@@ -222,5 +254,10 @@ h1 {
 
     .activity-list {
         grid-template-columns: 1fr;
+    }
+
+    .secondary-actions {
+        flex-direction: column-reverse;
+        gap: 8px;
     }
 }
