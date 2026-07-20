@@ -1,4 +1,3 @@
-import { CONFIG } from "../config.js";
 import {
     clone,
     formatDate,
@@ -12,7 +11,7 @@ import {
     safeText,
     updateData
 } from "./storage.js";
-import { hasConfiguredMailEndpoint, isPlainObject } from "./share.js";
+import { isPlainObject } from "./share.js";
 import { PLAN_CATEGORIES } from "./calendar.js";
 
 const TIMES = ["Vormittags", "Nachmittags", "Abends", "Ganzer Tag", "Egal", "Keine Auswahl"];
@@ -189,7 +188,7 @@ function responseToPlanPrefill(response) {
     };
 }
 
-function appendInvitationCard(parent, invitation, context, rerender) {
+function appendInvitationCard(parent, invitation, context, rerender, answerInvitation) {
     const card = document.createElement("article");
     card.className = "list-card";
     const heading = document.createElement("div");
@@ -236,12 +235,14 @@ function appendInvitationCard(parent, invitation, context, rerender) {
 
     const actions = document.createElement("div");
     actions.className = "action-row";
-    const share = document.createElement("button");
-    share.type = "button";
-    share.className = "secondary-button";
-    share.textContent = invitation.response ? "Einladung erneut teilen" : "Einladungslink teilen";
-    share.addEventListener("click", () => context.showShare("invite", { ...invitation, response: null }, "Einladung teilen", `Eine Einladung von ${invitation.createdBy}`));
-    actions.append(share);
+    if (!invitation.response && invitation.recipient === getCurrentIdentity()) {
+        const answer = document.createElement("button");
+        answer.type = "button";
+        answer.className = "primary-button";
+        answer.textContent = "Antworten";
+        answer.addEventListener("click", () => answerInvitation(invitation));
+        actions.append(answer);
+    }
     if (invitation.response) {
         const plan = document.createElement("button");
         plan.type = "button";
@@ -253,14 +254,14 @@ function appendInvitationCard(parent, invitation, context, rerender) {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "danger-button";
-    remove.textContent = "Lokal löschen";
+    remove.textContent = "Für beide löschen";
     remove.addEventListener("click", () => {
-        if (!window.confirm("Diese Einladung nur in diesem Browser löschen?")) return;
+        if (!window.confirm("Diese Einladung für beide Personen auf allen Geräten löschen?")) return;
         updateData((data) => {
             data.invitations = data.invitations.filter((item) => item.id !== invitation.id);
             return data;
         });
-        context.toast("Einladung wurde lokal gelöscht.");
+        context.toast("Einladung wird auf allen Geräten gelöscht.");
         rerender();
     });
     actions.append(remove);
@@ -270,13 +271,18 @@ function appendInvitationCard(parent, invitation, context, rerender) {
 
 export function renderInvitations(container, context) {
     const rerender = () => renderInvitations(container, context);
+    const answerInvitation = (invitation) => {
+        renderInvitationShare(container, { ...invitation, response: null }, "invite", context);
+        container.focus();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
     const prefill = context.consumePrefill?.("invitations") || {};
     const invitations = loadData().invitations.flatMap((item) => {
         try { return [sanitizeInvitation({ kind: "INVITATION", ...item })]; } catch (error) { return []; }
     }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     container.innerHTML = `
-        <header class="page-header"><p class="eyebrow">EINLADUNG</p><h1>Was machen wir zusammen?</h1><p class="muted">Erstelle einen Link. Die Antwort kommt über einen neuen Link oder optional per E-Mail zurück.</p></header>
+        <header class="page-header"><p class="eyebrow">EINLADUNG</p><h1>Was machen wir zusammen?</h1><p class="muted">Erstelle eine Einladung. Sie erscheint automatisch bei der anderen Person – ohne Link und ohne E-Mail.</p></header>
         <div class="choice-launcher">
             <button id="choose-open" type="button"><span>💌</span><strong>Gemeinsam auswählen</strong><span>Die andere Person wählt Datum, Zeit und Aktivitäten.</span></button>
             <button id="choose-concrete" type="button"><span>✨</span><strong>Konkrete Idee</strong><span>Schlage eine fertige Aktivität mit optionalem Termin vor.</span></button>
@@ -286,7 +292,7 @@ export function renderInvitations(container, context) {
             <form id="open-invite-form" class="form-stack">
                 <label class="field"><span>Optionale Nachricht</span><textarea name="message" maxlength="300" placeholder="Zum Beispiel: Such dir etwas Schönes aus ..."></textarea></label>
                 <p class="small-note">Empfänger: ${getOppositeIdentity()}</p>
-                <div class="action-row"><button class="primary-button" type="submit">Einladungslink erstellen</button></div>
+                <div class="action-row"><button class="primary-button" type="submit">Einladung speichern</button></div>
             </form>
         </section>
         <section id="concrete-invite-card" class="module-card" hidden>
@@ -301,11 +307,11 @@ export function renderInvitations(container, context) {
                     <label class="field span-two"><span>Notiz</span><textarea name="note" maxlength="300"></textarea></label>
                 </div>
                 <p id="concrete-error" class="error-message" aria-live="polite"></p>
-                <div class="action-row"><button class="primary-button" type="submit">Einladungslink erstellen</button></div>
+                <div class="action-row"><button class="primary-button" type="submit">Einladung speichern</button></div>
             </form>
         </section>
         <section style="margin-top:28px">
-            <div class="section-heading"><h2>Einladungen auf diesem Gerät</h2><span class="badge">${invitations.length}</span></div>
+            <div class="section-heading"><h2>Gemeinsame Einladungen</h2><span class="badge">${invitations.length}</span></div>
             <div id="invitation-list" class="list-stack"></div>
         </section>
         <div class="action-row" style="margin-top:20px"><button class="secondary-button" type="button" data-route="home">← Zur Startseite</button></div>`;
@@ -340,8 +346,8 @@ export function renderInvitations(container, context) {
         event.preventDefault();
         const invitation = createOpenInvitation(event.currentTarget);
         saveNewInvitation(invitation);
-        context.toast("Einladung wurde lokal gespeichert.");
-        context.showShare("invite", invitation, "Offene Einladung", `${invitation.createdBy} lädt dich ein, etwas gemeinsam auszuwählen.`);
+        context.toast("Einladung wird für euch beide synchronisiert.");
+        rerender();
     });
     container.querySelector("#concrete-invite-form").addEventListener("submit", (event) => {
         event.preventDefault();
@@ -353,60 +359,15 @@ export function renderInvitations(container, context) {
             return;
         }
         saveNewInvitation(invitation);
-        context.toast("Einladung wurde lokal gespeichert.");
-        context.showShare("invite", invitation, "Einladung", `${invitation.emoji} ${invitation.activity}`);
+        context.toast("Einladung wird für euch beide synchronisiert.");
+        rerender();
     });
 
     const list = container.querySelector("#invitation-list");
     if (!invitations.length) {
-        list.innerHTML = '<div class="module-card empty-state">Noch keine Einladungen auf diesem Gerät.</div>';
+        list.innerHTML = '<div class="module-card empty-state">Noch keine gemeinsamen Einladungen.</div>';
     } else {
-        invitations.forEach((invitation) => appendInvitationCard(list, invitation, context, rerender));
-    }
-}
-
-async function sendResponseEmail(button, statusElement, errorElement, response) {
-    if (!hasConfiguredMailEndpoint(CONFIG.formSubmitEndpoint)) return;
-    const original = response.originalInvitation;
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 15000);
-    button.disabled = true;
-    const oldText = button.textContent;
-    button.textContent = "Wird gesendet ...";
-    statusElement.textContent = "";
-    errorElement.textContent = "";
-    const answer = response.type === "CONCRETE_RESPONSE" ? responseSummary(response) : "Auswahl beantwortet";
-    const fields = {
-        _subject: "Antwort aus Couple Space",
-        Typ: response.type,
-        Von: response.respondedBy,
-        "Für": response.originalCreator,
-        Datum: response.type === "OPEN_SELECTION_RESPONSE" ? displayDateChoice(response.dateChoice) : (original?.date ? formatDate(original.date) : "Keine Auswahl"),
-        Uhrzeit: response.type === "OPEN_SELECTION_RESPONSE" ? response.timeChoice : (original?.time || "Keine Auswahl"),
-        "Aktivitäten": response.type === "OPEN_SELECTION_RESPONSE" ? (response.activities.join(", ") || "Keine Auswahl") : (original?.activity || "Keine Auswahl"),
-        Antwort: answer,
-        "Vorgeschlagenes Datum": response.suggestedDate ? formatDate(response.suggestedDate) : "Keine Auswahl",
-        Notiz: response.type === "OPEN_SELECTION_RESPONSE" ? response.otherActivityText : (original?.note || "")
-    };
-    const formData = new FormData();
-    Object.entries(fields).forEach(([key, value]) => formData.append(key, value));
-    try {
-        const result = await fetch(CONFIG.formSubmitEndpoint, {
-            method: "POST",
-            body: formData,
-            headers: { Accept: "application/json" },
-            signal: controller.signal
-        });
-        if (!result.ok) throw new Error("MAIL_FAILED");
-        statusElement.textContent = "Antwort wurde gesendet.";
-    } catch (error) {
-        errorElement.textContent = error?.name === "AbortError"
-            ? "Das Senden hat zu lange gedauert. Bitte versuche es erneut."
-            : "Das Senden hat nicht geklappt. Bitte versuche es erneut.";
-    } finally {
-        window.clearTimeout(timeout);
-        button.disabled = false;
-        button.textContent = oldText;
+        invitations.forEach((invitation) => appendInvitationCard(list, invitation, context, rerender, answerInvitation));
     }
 }
 
@@ -415,30 +376,26 @@ function renderResponseActions(container, invitation, response, context) {
         <div class="step-indicator"><span class="active"></span><span class="active"></span><span class="active"></span></div>
         <h2>Antwort ist bereit</h2>
         <div class="success-notice" id="response-summary"></div>
-        <p class="muted">Sende den Antwortlink zurück. E-Mail ist nur eine zusätzliche Benachrichtigung.</p>
+        <p class="muted">Speichere die Antwort. Sie erscheint automatisch auf beiden Geräten.</p>
         <div class="action-row">
-            <button id="share-invite-response" class="primary-button" type="button">Antwortlink teilen</button>
-            <button id="email-invite-response" class="secondary-button" type="button">Antwort per E-Mail senden</button>
+            <button id="save-invite-response-direct" class="primary-button" type="button">Antwort gemeinsam speichern</button>
+            <button class="text-button" type="button" data-route="invitations">Abbrechen</button>
         </div>
-        <p id="mail-unavailable" class="small-note" hidden>Kein FormSubmit-Endpunkt konfiguriert. Bitte teile den Antwortlink.</p>
-        <p id="mail-status" class="status-message" aria-live="polite"></p>
-        <p id="mail-error" class="error-message" aria-live="polite"></p>`;
+        <p id="response-save-error" class="error-message" aria-live="polite"></p>`;
     container.querySelector("#response-summary").textContent = responseSummary(response);
-    container.querySelector("#share-invite-response").addEventListener("click", () => {
-        context.showShare("inviteResponse", response, "Antwort auf eine Einladung", `${response.respondedBy} hat auf deine Einladung geantwortet.`);
+    container.querySelector("#save-invite-response-direct").addEventListener("click", (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+            saveImportedResponse(response, true);
+            context.toast("Antwort wird für euch beide synchronisiert.");
+            context.navigate("invitations");
+        } catch (error) {
+            console.error("Einladungsantwort konnte nicht gespeichert werden.", error);
+            container.querySelector("#response-save-error").textContent = "Die Antwort konnte nicht gespeichert werden. Bitte versuche es erneut.";
+            button.disabled = false;
+        }
     });
-    const emailButton = container.querySelector("#email-invite-response");
-    if (!hasConfiguredMailEndpoint(CONFIG.formSubmitEndpoint)) {
-        emailButton.hidden = true;
-        container.querySelector("#mail-unavailable").hidden = false;
-    } else {
-        emailButton.addEventListener("click", () => sendResponseEmail(
-            emailButton,
-            container.querySelector("#mail-status"),
-            container.querySelector("#mail-error"),
-            response
-        ));
-    }
 }
 
 function renderOpenInvitationShare(container, invitation, context) {
@@ -644,17 +601,17 @@ function renderInvitationResponseShare(container, rawResponse, context) {
     const localInvitation = loadData().invitations.find((item) => item.id === response.invitationId);
     const conflict = Boolean(localInvitation?.response && !sameResponse(localInvitation.response, response));
     container.innerHTML = `
-        <header class="page-header"><p class="eyebrow">EINLADUNGSANTWORT</p><h1>Eine Antwort ist angekommen</h1><p class="muted">Prüfe sie, bevor du sie in deinen lokalen Einladungen speicherst.</p></header>
+        <header class="page-header"><p class="eyebrow">EINLADUNGSANTWORT</p><h1>Eine Antwort ist angekommen</h1><p class="muted">Prüfe sie, bevor du sie in euren gemeinsamen Einladungen speicherst.</p></header>
         <section class="module-card">
             <div class="share-preview"><dl><dt>Geteilt von</dt><dd id="response-by"></dd><dt>Typ</dt><dd>Einladungsantwort</dd><dt>Inhalt</dt><dd id="response-content"></dd></dl></div>
-            <div id="response-conflict" class="warning-notice" ${conflict ? "" : "hidden"} style="margin-top:16px">Für diese Einladung gibt es bereits eine andere lokale Antwort. Wähle eine Version.</div>
+            <div id="response-conflict" class="warning-notice" ${conflict ? "" : "hidden"} style="margin-top:16px">Für diese Einladung gibt es bereits eine andere Antwort. Wähle eine Version.</div>
             <div class="action-row" style="margin-top:18px">
                 <button id="save-invite-response" class="primary-button" type="button">In meinen Einladungen speichern</button>
                 <button id="response-as-plan" class="secondary-button" type="button">Als Plan speichern</button>
                 <button class="text-button" type="button" data-route="home">Abbrechen</button>
             </div>
             <div id="response-conflict-actions" class="action-row" hidden style="margin-top:12px">
-                <button id="keep-local-response" class="secondary-button" type="button">Lokale Antwort behalten</button>
+                <button id="keep-local-response" class="secondary-button" type="button">Vorhandene Antwort behalten</button>
                 <button id="use-shared-response" class="danger-button" type="button">Geteilte Antwort verwenden</button>
             </div>
         </section>`;
@@ -662,7 +619,7 @@ function renderInvitationResponseShare(container, rawResponse, context) {
     container.querySelector("#response-content").textContent = responseSummary(response);
     function save(useShared) {
         saveImportedResponse(response, useShared);
-        context.toast("Antwort wurde in den lokalen Einladungen gespeichert.");
+        context.toast("Antwort wird mit euren gemeinsamen Einladungen synchronisiert.");
         context.clearShare();
     }
     container.querySelector("#save-invite-response").addEventListener("click", () => {

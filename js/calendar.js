@@ -203,7 +203,7 @@ function appendPlanCard(parent, rawPlan, context, rerender, compact = false) {
                     return;
                 }
                 setPlanReaction(plan.id, type);
-                context.toast("Reaktion wurde lokal gespeichert.");
+                context.toast("Reaktion wird synchronisiert.");
                 rerender();
             });
             reactions.append(button);
@@ -236,12 +236,12 @@ function appendPlanCard(parent, rawPlan, context, rerender, compact = false) {
         remove.className = "danger-button";
         remove.textContent = "Lokal löschen";
         remove.addEventListener("click", () => {
-            if (!window.confirm("Diesen Plan nur in diesem Browser löschen?")) return;
+            if (!window.confirm("Diesen Plan für Yaoyu und Daria auf allen Geräten löschen?")) return;
             updateData((data) => {
                 data.plans = data.plans.filter((item) => item.id !== plan.id);
                 return data;
             });
-            context.toast("Plan wurde lokal gelöscht.");
+            context.toast("Plan wird auf allen Geräten gelöscht.");
             rerender();
         });
         actions.append(share, remove);
@@ -321,7 +321,7 @@ export function renderCalendar(container, context) {
 
     container.innerHTML = `
         <header class="page-header page-header-row">
-            <div><p class="eyebrow">PLANUNGSZENTRUM</p><h1>Unsere Pläne</h1><p class="muted">Kalender, Ideen und Reaktionen – lokal auf diesem Gerät.</p></div>
+            <div><p class="eyebrow">PLANUNGSZENTRUM</p><h1>Unsere Pläne</h1><p class="muted">Kalender, Ideen und Reaktionen – automatisch zwischen euren Geräten synchronisiert.</p></div>
             <button id="toggle-plan-form" class="primary-button" type="button">+ Plan hinzufügen</button>
         </header>
         <section id="plan-form-card" class="module-card" ${Object.keys(prefill).length ? "" : "hidden"}>
@@ -336,7 +336,7 @@ export function renderCalendar(container, context) {
                     <label class="field span-two"><span>Notiz</span><textarea name="note" maxlength="300"></textarea></label>
                 </div>
                 <p id="plan-error" class="error-message" aria-live="polite"></p>
-                <div class="action-row"><button class="primary-button" type="submit">Plan lokal speichern</button></div>
+                <div class="action-row"><button class="primary-button" type="submit">Plan gemeinsam speichern</button></div>
             </form>
         </section>
         <section class="calendar-layout" style="margin-top:20px">
@@ -385,7 +385,7 @@ export function renderCalendar(container, context) {
             return current;
         });
         selectedDate = plan.date;
-        context.toast("Plan wurde lokal gespeichert.");
+        context.toast("Plan wird mit Firebase synchronisiert.");
         rerender();
     });
 
@@ -420,7 +420,7 @@ export function renderPlanShare(container, rawPayload, context) {
     const conflicts = findPlanConflicts(local ? sanitizeSharedPlan({ kind: "PLAN", ...local }) : null, plan);
 
     container.innerHTML = `
-        <header class="page-header"><p class="eyebrow">GETEILTER PLAN</p><h1>Ein Plan für euch</h1><p class="muted">Prüfe den Inhalt, bevor du ihn lokal speicherst.</p></header>
+        <header class="page-header"><p class="eyebrow">GETEILTER PLAN</p><h1>Ein Plan für euch</h1><p class="muted">Prüfe den Inhalt, bevor du ihn in euren gemeinsamen Space übernimmst.</p></header>
         <section class="module-card">
             <div class="share-preview"><dl><dt>Geteilt von</dt><dd id="shared-by"></dd><dt>Typ</dt><dd>Plan</dd><dt>Inhalt</dt><dd id="shared-content"></dd><dt>Datum</dt><dd id="shared-date"></dd></dl></div>
             <p id="shared-note"></p>
@@ -440,7 +440,7 @@ export function renderPlanShare(container, rawPayload, context) {
                 <button class="text-button" type="button" data-route="home">Abbrechen</button>
             </div>
             <div id="plan-conflict-actions" class="action-row" hidden style="margin-top:12px">
-                <button id="keep-local-plan" class="secondary-button" type="button">Lokale Version behalten</button>
+                <button id="keep-local-plan" class="secondary-button" type="button">Vorhandene Version behalten</button>
                 <button id="use-shared-plan" class="danger-button" type="button">Geteilte Version verwenden</button>
             </div>
         </section>`;
@@ -450,7 +450,7 @@ export function renderPlanShare(container, rawPayload, context) {
     container.querySelector("#shared-date").textContent = `${formatDate(plan.date, { weekday: "long" })}${plan.time ? ` · ${plan.time}` : ""}`;
     container.querySelector("#shared-note").textContent = plan.note;
     const conflictBox = container.querySelector("#plan-conflict");
-    if (conflicts.length) conflictBox.textContent = `Es gibt lokale Unterschiede bei: ${conflicts.join(", ")}. Wähle beim Speichern eine Version.`;
+    if (conflicts.length) conflictBox.textContent = `Es gibt Unterschiede bei: ${conflicts.join(", ")}. Wähle beim Speichern eine Version.`;
 
     const dateField = container.querySelector("#shared-date-field");
     container.querySelectorAll('[name="shared-plan-reaction"]').forEach((input) => {
@@ -477,7 +477,7 @@ export function renderPlanShare(container, rawPayload, context) {
     function save(useShared = false) {
         if (!applyReaction()) return;
         mergePlan(plan, useShared);
-        context.toast("Plan wurde lokal gespeichert.");
+        context.toast("Plan wird mit eurem gemeinsamen Space synchronisiert.");
         context.clearShare();
     }
 

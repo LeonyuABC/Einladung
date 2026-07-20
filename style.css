@@ -184,6 +184,31 @@ h3 {
     margin: 30px 0 22px;
 }
 
+.pin-form {
+    margin: 28px 0 8px;
+    text-align: left;
+}
+
+.pin-form .primary-button {
+    align-self: stretch;
+}
+
+.pin-person {
+    margin: 0;
+    color: #a94364;
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 800;
+}
+
+.pin-actions {
+    align-items: center;
+}
+
+.pin-actions .primary-button {
+    flex: 1 1 220px;
+}
+
 .identity-button {
     min-height: 88px;
     display: flex;
@@ -203,6 +228,12 @@ h3 {
     border-color: var(--primary);
     background: #fceaf0;
     transform: translateY(-2px);
+}
+
+.identity-button:disabled {
+    cursor: wait;
+    opacity: 0.48;
+    transform: none;
 }
 
 .identity-avatar {
@@ -259,6 +290,27 @@ h3 {
     gap: 13px;
     color: var(--muted);
     font-size: 0.9rem;
+}
+
+.sync-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.sync-status[data-status="connected"] {
+    color: var(--success);
+}
+
+.sync-status[data-status="saving"],
+.sync-status[data-status="connecting"] {
+    color: var(--warning);
+}
+
+.sync-status[data-status="error"] {
+    color: var(--danger);
 }
 
 .main-nav {

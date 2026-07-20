@@ -101,12 +101,6 @@ export function clearShareParametersFromAddressBar() {
     history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
 }
 
-export function hasConfiguredMailEndpoint(endpoint) {
-    return typeof endpoint === "string"
-        && endpoint.startsWith("https://formsubmit.co/")
-        && !endpoint.includes("FORM_SUBMIT_ENDPOINT_HERE");
-}
-
 export function isPlainObject(value) {
     return value !== null && typeof value === "object" && !Array.isArray(value);
 }

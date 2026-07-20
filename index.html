@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#fff7f9">
-    <meta name="description" content="Couple Space – ein kleiner lokaler Planungsraum für Yaoyu und Daria.">
+    <meta name="description" content="Couple Space – ein gemeinsamer, synchronisierter Raum für Yaoyu und Daria.">
     <title>Couple Space</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -12,23 +12,42 @@
 <div class="background-orb orb-one" aria-hidden="true"></div>
 <div class="background-orb orb-two" aria-hidden="true"></div>
 
-<section id="identity-view" class="identity-screen" aria-labelledby="identity-title" hidden>
+<section id="identity-view" class="identity-screen" aria-labelledby="identity-title">
     <div class="card identity-card">
         <p class="eyebrow">COUPLE SPACE</p>
         <div class="brand-heart" aria-hidden="true">♡</div>
         <h1 id="identity-title">Wer bist du?</h1>
-        <p class="muted">Wähle deine lokale Identität auf diesem Gerät.</p>
-        <div class="identity-options">
+        <p class="muted">Wähle deinen Namen. Couple Space verbindet sich im Hintergrund automatisch mit eurem gemeinsamen Raum.</p>
+
+        <div id="firebase-config-warning" class="warning-notice" hidden>
+            Firebase ist noch nicht eingerichtet. Öffne zuerst <strong>FIREBASE-SETUP.md</strong> und fülle danach <strong>config.js</strong> aus.
+        </div>
+
+        <div id="identity-options" class="identity-options" aria-label="Person auswählen">
             <button class="identity-button" type="button" data-identity="Yaoyu">
-                <span class="identity-avatar">Y</span>
+                <span class="identity-avatar" aria-hidden="true">Y</span>
                 <span>Yaoyu</span>
             </button>
             <button class="identity-button" type="button" data-identity="Daria">
-                <span class="identity-avatar">D</span>
+                <span class="identity-avatar" aria-hidden="true">D</span>
                 <span>Daria</span>
             </button>
         </div>
-        <p class="small-note">Kein echtes Login: Die Auswahl gilt nur in diesem Browser.</p>
+
+        <form id="pin-login-form" class="form-stack pin-form" hidden>
+            <p id="pin-person" class="pin-person"></p>
+            <label class="field">
+                <span>Deine PIN</span>
+                <input id="login-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" pattern="[0-9]*" maxlength="8" required>
+            </label>
+            <div class="action-row pin-actions">
+                <button id="pin-login-button" class="primary-button" type="submit">Couple Space öffnen</button>
+                <button id="cancel-pin" class="text-button" type="button">Andere Person wählen</button>
+            </div>
+        </form>
+        <p id="login-status" class="status-message" aria-live="polite"></p>
+        <p id="login-error" class="error-message" aria-live="polite"></p>
+        <p class="small-note">Keine Registrierung, keine E-Mail. Änderungen werden über Firebase automatisch auf beiden Geräten gespeichert.</p>
     </div>
 </section>
 
@@ -39,8 +58,9 @@
             <span>Couple Space</span>
         </button>
         <div class="identity-status">
-            <span id="identity-label">Aktuell: –</span>
-            <button id="switch-identity" class="text-button" type="button">Identität wechseln</button>
+            <span id="sync-status" class="sync-status" data-status="connecting">● Verbinden ...</span>
+            <span id="identity-label">Aktiv: –</span>
+            <button id="switch-identity" class="text-button" type="button">Person wechseln</button>
         </div>
     </header>
 
@@ -55,7 +75,7 @@
     <main id="main-content" class="main-content" tabindex="-1"></main>
 
     <footer class="site-footer">
-        <span>Nur auf diesem Gerät gespeichert</span>
+        <span>Mit eurem gemeinsamen Firebase-Raum synchronisiert</span>
         <button class="text-button" type="button" data-route="settings">⚙️ Einstellungen &amp; Backup</button>
     </footer>
 </div>

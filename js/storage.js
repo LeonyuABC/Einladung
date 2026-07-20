@@ -1,10 +1,16 @@
-const STORAGE_KEY = "coupleSpaceDataV1";
+// Eigener Cache-Schlüssel, damit eine ältere reine localStorage-Version nicht
+// überschrieben wird. Alte Daten können per JSON-Backup importiert werden.
+const STORAGE_KEY = "coupleSpaceCloudCacheV1";
 const IDENTITIES = ["Yaoyu", "Daria"];
+const SHARED_COLLECTIONS = ["invitations", "plans", "diaryEntries", "wishlistItems"];
 
-function emptyData() {
+let syncDiffHandler = null;
+let replaceAllHandler = null;
+
+function emptyData(identity = null) {
     return {
         version: 1,
-        currentIdentity: null,
+        currentIdentity: IDENTITIES.includes(identity) ? identity : null,
         invitations: [],
         plans: [],
         diaryEntries: [],
@@ -24,12 +30,8 @@ function cleanArray(value) {
 export function normalizeData(value) {
     const clean = emptyData();
     if (!isRecord(value) || value.version !== 1) return clean;
-
     clean.currentIdentity = IDENTITIES.includes(value.currentIdentity) ? value.currentIdentity : null;
-    clean.invitations = cleanArray(value.invitations);
-    clean.plans = cleanArray(value.plans);
-    clean.diaryEntries = cleanArray(value.diaryEntries);
-    clean.wishlistItems = cleanArray(value.wishlistItems);
+    SHARED_COLLECTIONS.forEach((name) => { clean[name] = cleanArray(value[name]); });
     return clean;
 }
 
@@ -39,27 +41,65 @@ export function loadData() {
         if (!raw) return emptyData();
         return normalizeData(JSON.parse(raw));
     } catch (error) {
-        console.warn("Lokale Daten konnten nicht gelesen werden.", error);
+        console.warn("Lokaler Zwischenspeicher konnte nicht gelesen werden.", error);
         return emptyData();
     }
 }
 
-export function saveData(data) {
+function saveLocalData(data) {
     const clean = normalizeData({ ...data, version: 1 });
     try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(clean));
         return true;
     } catch (error) {
-        console.error("Lokale Daten konnten nicht gespeichert werden.", error);
+        console.error("Lokaler Zwischenspeicher konnte nicht geschrieben werden.", error);
         return false;
     }
 }
 
-export function updateData(change) {
+// Speichert nur den lokalen Spiegel. Für einen vollständigen Cloud-Ersatz
+// (zum Beispiel Backup-Import) replaceSharedData() verwenden.
+export function saveData(data) {
+    return saveLocalData(data);
+}
+
+export function configureCloudStorage({ syncDiff, replaceAll }) {
+    syncDiffHandler = typeof syncDiff === "function" ? syncDiff : null;
+    replaceAllHandler = typeof replaceAll === "function" ? replaceAll : null;
+}
+
+export function applyCloudCollection(name, items) {
+    if (!SHARED_COLLECTIONS.includes(name)) return;
     const data = loadData();
-    const result = change(data) || data;
-    if (!saveData(result)) throw new Error("STORAGE_WRITE_FAILED");
-    return normalizeData(result);
+    data[name] = cleanArray(items).map((item) => {
+        const { cloudUpdatedAt, ...record } = item;
+        return record;
+    });
+    saveLocalData(data);
+    window.dispatchEvent(new CustomEvent("couple-space-cloud-data", { detail: { collection: name } }));
+}
+
+export function updateData(change) {
+    const before = loadData();
+    const draft = JSON.parse(JSON.stringify(before));
+    const changed = change(draft) || draft;
+    const after = normalizeData({ ...changed, version: 1 });
+    if (!saveLocalData(after)) throw new Error("STORAGE_WRITE_FAILED");
+    if (syncDiffHandler) {
+        Promise.resolve(syncDiffHandler(before, after)).catch(() => {
+            // Der Synchronisationsstatus wird von cloud.js sichtbar gemeldet.
+        });
+    }
+    return after;
+}
+
+export async function replaceSharedData(value) {
+    const current = loadData();
+    const clean = normalizeData({ ...value, version: 1, currentIdentity: current.currentIdentity });
+    if (!replaceAllHandler) throw new Error("CLOUD_NOT_READY");
+    await replaceAllHandler(clean);
+    saveLocalData(clean);
+    return clean;
 }
 
 export function getCurrentIdentity() {
@@ -70,7 +110,13 @@ export function setCurrentIdentity(identity) {
     if (!IDENTITIES.includes(identity)) return false;
     const data = loadData();
     data.currentIdentity = identity;
-    return saveData(data);
+    return saveLocalData(data);
+}
+
+export function clearCurrentIdentity() {
+    const data = loadData();
+    data.currentIdentity = null;
+    return saveLocalData(data);
 }
 
 export function getOppositeIdentity(identity = getCurrentIdentity()) {
@@ -82,7 +128,15 @@ export function generateId() {
     return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-export function resetAllData() {
+export async function resetAllData() {
+    const identity = getCurrentIdentity();
+    const clean = emptyData(identity);
+    if (!replaceAllHandler) throw new Error("CLOUD_NOT_READY");
+    await replaceAllHandler(clean);
+    saveLocalData(clean);
+}
+
+export function clearLocalCache() {
     localStorage.removeItem(STORAGE_KEY);
 }
 
@@ -125,4 +179,4 @@ export function clone(value) {
     return JSON.parse(JSON.stringify(value));
 }
 
-export { STORAGE_KEY, IDENTITIES };
+export { STORAGE_KEY, IDENTITIES, SHARED_COLLECTIONS };

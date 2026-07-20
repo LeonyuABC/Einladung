@@ -147,7 +147,7 @@ function appendWishCard(parent, wish, context, rerender) {
         button.textContent = label;
         button.addEventListener("click", () => {
             setReaction(wish.id, value);
-            context.toast("Reaktion wurde lokal gespeichert.");
+            context.toast("Reaktion wird synchronisiert.");
             rerender();
         });
         reactions.append(button);
@@ -191,12 +191,12 @@ function appendWishCard(parent, wish, context, rerender) {
     remove.className = "danger-button";
     remove.textContent = "Lokal löschen";
     remove.addEventListener("click", () => {
-        if (!window.confirm("Diesen Wunsch nur in diesem Browser löschen?")) return;
+        if (!window.confirm("Diesen Wunsch für beide Personen auf allen Geräten löschen?")) return;
         updateData((data) => {
             data.wishlistItems = data.wishlistItems.filter((item) => item.id !== wish.id);
             return data;
         });
-        context.toast("Wunsch wurde lokal gelöscht.");
+        context.toast("Wunsch wird auf allen Geräten gelöscht.");
         rerender();
     });
     actions.append(remove);
@@ -225,7 +225,7 @@ export function renderWishlist(container, context) {
                     <label class="field span-two"><span>Notiz</span><textarea name="note" maxlength="300"></textarea></label>
                 </div>
                 <p id="wish-error" class="error-message" aria-live="polite"></p>
-                <div class="action-row"><button class="primary-button" type="submit">Wunsch lokal speichern</button></div>
+                <div class="action-row"><button class="primary-button" type="submit">Wunsch gemeinsam speichern</button></div>
             </form>
         </section>
         <section style="margin-top:24px">
@@ -253,7 +253,7 @@ export function renderWishlist(container, context) {
             data.wishlistItems.push(wish);
             return data;
         });
-        context.toast("Wunsch wurde lokal gespeichert.");
+        context.toast("Wunsch wird mit Firebase synchronisiert.");
         rerender();
     });
 
@@ -294,7 +294,7 @@ export function renderWishlistShare(container, rawPayload, context) {
                 <button class="text-button" type="button" data-route="home">Abbrechen</button>
             </div>
             <div id="wish-conflict-actions" class="action-row" hidden style="margin-top:12px">
-                <button id="keep-local-wish" class="secondary-button" type="button">Lokale Version behalten</button>
+                <button id="keep-local-wish" class="secondary-button" type="button">Vorhandene Version behalten</button>
                 <button id="use-shared-wish" class="danger-button" type="button">Geteilte Version verwenden</button>
             </div>
         </section>`;
@@ -302,7 +302,7 @@ export function renderWishlistShare(container, rawPayload, context) {
     container.querySelector("#wish-shared-content").textContent = `${wish.emoji} ${wish.activity}`;
     container.querySelector("#wish-shared-category").textContent = wish.category;
     container.querySelector("#wish-shared-note").textContent = wish.note;
-    if (conflicts.length) container.querySelector("#wish-conflict").textContent = `Lokale Unterschiede: ${conflicts.join(", ")}. Wähle beim Speichern eine Version.`;
+    if (conflicts.length) container.querySelector("#wish-conflict").textContent = `Unterschiede: ${conflicts.join(", ")}. Wähle beim Speichern eine Version.`;
     container.querySelectorAll('[name="shared-wish-reaction"]').forEach((input) => {
         if (wish.reactions[identity] === input.value) input.checked = true;
     });
@@ -313,7 +313,7 @@ export function renderWishlistShare(container, rawPayload, context) {
     function save(useShared = false) {
         applyReaction();
         mergeWish(wish, useShared);
-        context.toast("Wunsch wurde lokal gespeichert.");
+        context.toast("Wunsch wird synchronisiert.");
         context.clearShare();
     }
     container.querySelector("#save-shared-wish").addEventListener("click", () => {

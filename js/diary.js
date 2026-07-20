@@ -220,7 +220,7 @@ function appendEntryCard(parent, entry, context, rerender) {
         event.preventDefault();
         if (!select.value) return;
         saveContribution(entry.id, select.value, textarea.value);
-        context.toast("Bewertung wurde lokal gespeichert.");
+        context.toast("Bewertung wird synchronisiert.");
         rerender();
     });
     details.append(form);
@@ -238,7 +238,7 @@ function appendEntryCard(parent, entry, context, rerender) {
     remove.className = "danger-button";
     remove.textContent = "Lokal löschen";
     remove.addEventListener("click", () => {
-        if (!window.confirm("Diesen Tagebucheintrag nur in diesem Browser löschen?")) return;
+        if (!window.confirm("Diesen Tagebucheintrag für beide Personen auf allen Geräten löschen?")) return;
         updateData((data) => {
             data.diaryEntries = data.diaryEntries.filter((item) => item.id !== entry.id);
             return data;
@@ -272,7 +272,7 @@ export function renderDiary(container, context) {
                     <label class="field span-two"><span>Kurze Beschreibung</span><textarea name="description" maxlength="300"></textarea></label>
                 </div>
                 <p id="diary-error" class="error-message" aria-live="polite"></p>
-                <div class="action-row"><button class="primary-button" type="submit">Eintrag lokal speichern</button></div>
+                <div class="action-row"><button class="primary-button" type="submit">Eintrag gemeinsam speichern</button></div>
             </form>
         </section>
         <section style="margin-top:24px">
@@ -338,7 +338,7 @@ export function renderDiaryShare(container, rawPayload, context) {
     const conflicts = conflictsFor(local, entry);
 
     container.innerHTML = `
-        <header class="page-header"><p class="eyebrow">GETEILTES TAGEBUCH</p><h1>Ein gemeinsamer Moment</h1><p class="muted">Geteilte Texte werden erst nach deiner Bestätigung lokal gespeichert.</p></header>
+        <header class="page-header"><p class="eyebrow">GETEILTES TAGEBUCH</p><h1>Ein gemeinsamer Moment</h1><p class="muted">Geteilte Texte werden erst nach deiner Bestätigung in euren gemeinsamen Space übernommen.</p></header>
         <section class="module-card">
             <div class="share-preview"><dl><dt>Geteilt von</dt><dd id="diary-shared-by"></dd><dt>Typ</dt><dd>Tagebuch</dd><dt>Inhalt</dt><dd id="diary-shared-title"></dd><dt>Datum</dt><dd id="diary-shared-date"></dd></dl></div>
             <p id="diary-shared-description"></p>
@@ -353,7 +353,7 @@ export function renderDiaryShare(container, rawPayload, context) {
                 <button class="text-button" type="button" data-route="home">Abbrechen</button>
             </div>
             <div id="diary-conflict-actions" class="action-row" hidden style="margin-top:12px">
-                <button id="keep-local-diary" class="secondary-button" type="button">Lokale Version behalten</button>
+                <button id="keep-local-diary" class="secondary-button" type="button">Vorhandene Version behalten</button>
                 <button id="use-shared-diary" class="danger-button" type="button">Geteilte Version verwenden</button>
             </div>
         </section>`;
@@ -362,7 +362,7 @@ export function renderDiaryShare(container, rawPayload, context) {
     container.querySelector("#diary-shared-title").textContent = `${entry.emoji} ${entry.title}`;
     container.querySelector("#diary-shared-date").textContent = formatDate(entry.date, { weekday: "long" });
     container.querySelector("#diary-shared-description").textContent = entry.description;
-    if (conflicts.length) container.querySelector("#diary-conflict").textContent = `Lokale Unterschiede: ${conflicts.join(", ")}. Wähle beim Speichern eine Version.`;
+    if (conflicts.length) container.querySelector("#diary-conflict").textContent = `Unterschiede: ${conflicts.join(", ")}. Wähle beim Speichern eine Version.`;
     const form = container.querySelector("#shared-diary-form");
     form.elements.mood.value = entry.contributions[identity]?.mood || "";
     form.elements.favoriteMoment.value = entry.contributions[identity]?.favoriteMoment || "";
@@ -378,7 +378,7 @@ export function renderDiaryShare(container, rawPayload, context) {
     function save(useShared = false) {
         applyContribution();
         mergeEntry(entry, useShared);
-        context.toast("Tagebucheintrag wurde lokal gespeichert.");
+        context.toast("Tagebucheintrag wird synchronisiert.");
         context.clearShare();
     }
     container.querySelector("#save-shared-diary").addEventListener("click", () => {

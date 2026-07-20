@@ -1,4 +1,16 @@
-import { loadData, formatDate, getCurrentIdentity, localToday } from "./storage.js";
+import {
+    applyCloudCollection,
+    configureCloudStorage,
+    loadData,
+    formatDate,
+    getCurrentIdentity,
+    localToday
+} from "./storage.js";
+import {
+    replaceAllCloudData,
+    startRealtimeSync,
+    syncDataDiff
+} from "./cloud.js";
 import {
     buildShareUrl,
     clearShareParametersFromAddressBar,
@@ -18,6 +30,7 @@ const toastElement = document.querySelector("#toast");
 const shareDialog = document.querySelector("#share-dialog");
 const shareOutput = document.querySelector("#share-url-output");
 const shareDialogMessage = document.querySelector("#share-dialog-message");
+const syncStatus = document.querySelector("#sync-status");
 const validRoutes = new Set(["home", "invitations", "calendar", "diary", "wishlist", "settings"]);
 
 let toastTimer = null;
@@ -117,8 +130,7 @@ const context = {
     onReset: () => {
         shareRequest = null;
         shareError = null;
-        history.replaceState({}, document.title, window.location.pathname);
-        showIdentitySelection(() => renderRoute("home"));
+        navigate("home");
     }
 };
 
@@ -141,7 +153,7 @@ function renderHome() {
                 <p class="muted">Ein ruhiger Ort für eure Einladungen, Pläne, Erinnerungen und Wünsche.</p>
             </article>
             <aside class="card hero-note">
-                <div><div class="big-emoji">♡</div><h2>Yaoyu &amp; Daria</h2><p class="muted">Zwei Browser, viele gemeinsame Links.</p></div>
+                <div><div class="big-emoji">♡</div><h2>Yaoyu &amp; Daria</h2><p class="muted">Zwei Geräte, ein gemeinsamer Raum.</p></div>
             </aside>
         </section>
         <section class="module-grid" aria-label="Bereiche">
@@ -189,7 +201,7 @@ function renderShare() {
 
 function renderRoute(route = currentRoute()) {
     if (!hasIdentity()) {
-        showIdentitySelection(() => renderRoute(route));
+        showIdentitySelection();
         return;
     }
     showApp();
@@ -230,11 +242,38 @@ document.querySelector("#copy-dialog-link").addEventListener("click", async () =
 });
 
 window.addEventListener("hashchange", () => renderRoute(currentRoute()));
-initializeIdentity(() => renderRoute(currentRoute()));
 
-if (hasIdentity()) {
-    showApp();
+window.addEventListener("couple-space-sync-status", (event) => {
+    const { status, message } = event.detail || {};
+    syncStatus.dataset.status = status || "connecting";
+    const labels = {
+        connecting: "● Verbinden ...",
+        connected: "● Synchronisiert",
+        saving: "● Speichern ...",
+        error: `● ${message || "Offline"}`
+    };
+    syncStatus.textContent = labels[status] || labels.connecting;
+});
+
+let cloudRefreshTimer = null;
+window.addEventListener("couple-space-cloud-data", () => {
+    window.clearTimeout(cloudRefreshTimer);
+    cloudRefreshTimer = window.setTimeout(() => {
+        if (!hasIdentity()) return;
+        if (main.querySelector("form:focus-within")) {
+            toast("Neue gemeinsame Daten sind angekommen. Nach dem Speichern wird die Ansicht aktualisiert.");
+            return;
+        }
+        renderRoute(currentRoute());
+    }, 120);
+});
+
+configureCloudStorage({
+    syncDiff: syncDataDiff,
+    replaceAll: replaceAllCloudData
+});
+
+initializeIdentity(() => {
+    startRealtimeSync((name, items) => applyCloudCollection(name, items));
     renderRoute(currentRoute());
-} else {
-    showIdentitySelection(() => renderRoute(currentRoute()));
-}
+});
