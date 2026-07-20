@@ -16,6 +16,7 @@
 - 暂时不上传照片；
 - Yaoyu 登录后使用浅蓝色主题，Daria 使用粉色主题；
 - 双方每天可各选一个心情 Emoji，并选择多个简短文字状态；
+- 独立心情月历可查看双方每日 Emoji，点击日期可查看、补记或修改自己的记录；
 - 网站可安装到 Android 或 iPhone 主屏幕，像小 App 一样打开。
 
 第一次运行前，请严格按照 [FIREBASE-SETUP.md](FIREBASE-SETUP.md) 完成 Firebase 后台的三个设置。
@@ -52,6 +53,7 @@ Daria 不需要 Firebase 账号，也不需要创建 Firebase 项目。只有你
 
 - Yaoyu / Daria 选择界面和各自 PIN；
 - 每人每天一个心情 Emoji、多个文字状态、可选自定义文字和备注；
+- 心情月历、月份切换、过去日期查看与补记；
 - Yaoyu 浅蓝主题与 Daria 粉色主题；
 - PWA 主屏幕安装支持（保持联网使用，不缓存旧程序文件）；
 - Firebase 匿名身份验证；

@@ -28,6 +28,9 @@ const TEXT_CHOICES = [
     "Ich möchte schlafen"
 ];
 
+const IDENTITIES = ["Yaoyu", "Daria"];
+const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+
 function sanitizeMood(value) {
     if (!value || typeof value !== "object") return null;
     const date = safeText(value.date, 10);
@@ -51,12 +54,33 @@ function sanitizeMood(value) {
     };
 }
 
-function todayMood(identity, data = loadData()) {
-    const date = localToday();
+function moodForDate(identity, date, data = loadData()) {
     const matches = (data.moods || [])
         .map(sanitizeMood)
         .filter((item) => item && item.date === date && item.identity === identity);
     return matches[matches.length - 1] || null;
+}
+
+function dateFromIso(value) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day);
+}
+
+function isoFromParts(year, monthIndex, day) {
+    return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function monthKey(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatSelectedDate(value) {
+    return dateFromIso(value).toLocaleDateString("de-DE", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+    });
 }
 
 function addMoodDetails(container, mood) {
@@ -94,10 +118,9 @@ function addMoodDetails(container, mood) {
     }
 }
 
-export function renderHomeMoods(container) {
-    const data = loadData();
+function renderMoodCards(container, date, data = loadData()) {
     container.replaceChildren();
-    ["Yaoyu", "Daria"].forEach((identity) => {
+    IDENTITIES.forEach((identity) => {
         const card = document.createElement("article");
         card.className = `mood-person-card mood-person-${identity.toLowerCase()}`;
 
@@ -105,24 +128,13 @@ export function renderHomeMoods(container) {
         heading.textContent = identity;
         card.append(heading);
 
-        addMoodDetails(card, todayMood(identity, data));
+        addMoodDetails(card, moodForDate(identity, date, data));
         container.append(card);
     });
 }
 
-function renderCurrentMoods(container) {
-    const data = loadData();
-    container.replaceChildren();
-    ["Yaoyu", "Daria"].forEach((identity) => {
-        const card = document.createElement("article");
-        card.className = `mood-person-card mood-person-${identity.toLowerCase()}`;
-
-        const heading = document.createElement("h3");
-        heading.textContent = identity;
-        card.append(heading);
-        addMoodDetails(card, todayMood(identity, data));
-        container.append(card);
-    });
+export function renderHomeMoods(container) {
+    renderMoodCards(container, localToday());
 }
 
 function makeEmojiButton(emoji, selectedEmoji, onSelect) {
@@ -148,25 +160,60 @@ function makeTextButton(text, selectedChoices, onToggle) {
     return button;
 }
 
+function makeCalendarMood(identity, mood) {
+    const row = document.createElement("span");
+    row.className = `mood-calendar-person mood-calendar-${identity.toLowerCase()}`;
+    row.setAttribute("aria-label", `${identity}: ${mood?.emoji || "kein Eintrag"}`);
+
+    const initial = document.createElement("b");
+    initial.textContent = identity[0];
+    const emoji = document.createElement("span");
+    emoji.textContent = mood?.emoji || "·";
+    row.append(initial, emoji);
+    return row;
+}
+
 export function renderMood(container, context) {
     const identity = getCurrentIdentity();
-    const existing = todayMood(identity);
-    let selectedEmoji = existing?.emoji || "";
-    const selectedChoices = new Set(existing?.choices || []);
+    const today = localToday();
+    const todayDate = dateFromIso(today);
+    let selectedDate = today;
+    let displayedMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+    let selectedEmoji = "";
+    const selectedChoices = new Set();
 
     container.innerHTML = `
         <header class="page-header page-header-row">
             <div>
-                <p class="eyebrow">HEUTE</p>
-                <h1>Wie fühlst du dich?</h1>
-                <p class="muted"><span id="mood-active-person"></span> wählt für heute.</p>
+                <p class="eyebrow">STIMMUNGSKALENDER</p>
+                <h1>Eure täglichen Stimmungen</h1>
+                <p class="muted">Wählt einen Tag aus und schaut, wie es euch ging.</p>
             </div>
             <button class="secondary-button" type="button" data-route="home">← Zur Startseite</button>
         </header>
 
+        <section class="mood-calendar-section module-card" aria-labelledby="mood-calendar-title">
+            <div class="mood-calendar-controls">
+                <button id="mood-previous-month" class="icon-button" type="button" aria-label="Vorheriger Monat">←</button>
+                <div>
+                    <h2 id="mood-calendar-title"></h2>
+                    <button id="mood-today" class="text-button" type="button">Heute</button>
+                </div>
+                <button id="mood-next-month" class="icon-button" type="button" aria-label="Nächster Monat">→</button>
+            </div>
+            <div id="mood-calendar-grid" class="mood-calendar-grid" aria-label="Monatskalender"></div>
+            <div class="mood-calendar-legend" aria-label="Personen">
+                <span class="mood-calendar-yaoyu"><b>Y</b> Yaoyu</span>
+                <span class="mood-calendar-daria"><b>D</b> Daria</span>
+            </div>
+        </section>
+
         <section class="mood-current-section" aria-labelledby="mood-current-title">
             <div class="section-heading">
-                <h2 id="mood-current-title">Heute bei euch</h2>
+                <div>
+                    <p id="mood-selected-label" class="eyebrow"></p>
+                    <h2 id="mood-current-title"></h2>
+                </div>
             </div>
             <div id="mood-current-grid" class="mood-person-grid"></div>
         </section>
@@ -181,7 +228,7 @@ export function renderMood(container, context) {
 
             <section class="mood-column module-card">
                 <div class="mood-column-number">2</div>
-                <h2>Was ist heute los?</h2>
+                <h2>Was ist los?</h2>
                 <div id="mood-text-grid" class="mood-text-grid" role="group" aria-label="Texte auswählen"></div>
             </section>
 
@@ -199,21 +246,23 @@ export function renderMood(container, context) {
             </section>
 
             <div class="mood-save-row">
-                <button class="primary-button" type="submit">Für heute speichern</button>
+                <button id="mood-save-button" class="primary-button" type="submit"></button>
             </div>
         </form>`;
 
-    container.querySelector("#mood-active-person").textContent = identity;
+    const calendarTitle = container.querySelector("#mood-calendar-title");
+    const calendarGrid = container.querySelector("#mood-calendar-grid");
+    const previousMonthButton = container.querySelector("#mood-previous-month");
+    const nextMonthButton = container.querySelector("#mood-next-month");
     const currentGrid = container.querySelector("#mood-current-grid");
+    const selectedLabel = container.querySelector("#mood-selected-label");
+    const currentTitle = container.querySelector("#mood-current-title");
     const emojiGrid = container.querySelector("#mood-emoji-grid");
     const textGrid = container.querySelector("#mood-text-grid");
     const customInput = container.querySelector("#mood-custom-text");
     const noteInput = container.querySelector("#mood-note");
     const emojiError = container.querySelector("#mood-emoji-error");
-
-    customInput.value = existing?.customText || "";
-    noteInput.value = existing?.note || "";
-    renderCurrentMoods(currentGrid);
+    const saveButton = container.querySelector("#mood-save-button");
 
     const refreshEmojiButtons = () => {
         emojiGrid.replaceChildren(...EMOJIS.map((emoji) => makeEmojiButton(emoji, selectedEmoji, (nextEmoji) => {
@@ -231,8 +280,103 @@ export function renderMood(container, context) {
         })));
     };
 
-    refreshEmojiButtons();
-    refreshTextButtons();
+    const renderCalendar = () => {
+        const data = loadData();
+        const year = displayedMonth.getFullYear();
+        const monthIndex = displayedMonth.getMonth();
+        const firstWeekday = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
+        const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+        const fragments = [];
+
+        calendarTitle.textContent = displayedMonth.toLocaleDateString("de-DE", {
+            month: "long",
+            year: "numeric"
+        });
+
+        WEEKDAYS.forEach((weekday) => {
+            const label = document.createElement("div");
+            label.className = "mood-calendar-weekday";
+            label.textContent = weekday;
+            fragments.push(label);
+        });
+
+        for (let index = 0; index < firstWeekday; index += 1) {
+            const empty = document.createElement("div");
+            empty.className = "mood-calendar-day empty";
+            empty.setAttribute("aria-hidden", "true");
+            fragments.push(empty);
+        }
+
+        for (let day = 1; day <= daysInMonth; day += 1) {
+            const date = isoFromParts(year, monthIndex, day);
+            const yaoyuMood = moodForDate("Yaoyu", date, data);
+            const dariaMood = moodForDate("Daria", date, data);
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "mood-calendar-day";
+            button.classList.toggle("today", date === today);
+            button.classList.toggle("selected", date === selectedDate);
+            button.classList.toggle("has-entry", Boolean(yaoyuMood || dariaMood));
+            button.disabled = date > today;
+            button.setAttribute("aria-label", `${formatSelectedDate(date)} auswählen`);
+
+            const dayNumber = document.createElement("span");
+            dayNumber.className = "mood-calendar-number";
+            dayNumber.textContent = String(day);
+            const people = document.createElement("span");
+            people.className = "mood-calendar-people";
+            people.append(
+                makeCalendarMood("Yaoyu", yaoyuMood),
+                makeCalendarMood("Daria", dariaMood)
+            );
+            button.append(dayNumber, people);
+            button.addEventListener("click", () => {
+                selectedDate = date;
+                displayedMonth = new Date(year, monthIndex, 1);
+                loadSelectedDate();
+            });
+            fragments.push(button);
+        }
+
+        calendarGrid.replaceChildren(...fragments);
+        nextMonthButton.disabled = monthKey(displayedMonth) >= monthKey(todayDate);
+    };
+
+    const loadSelectedDate = () => {
+        const existing = moodForDate(identity, selectedDate);
+        selectedEmoji = existing?.emoji || "";
+        selectedChoices.clear();
+        (existing?.choices || []).forEach((choice) => selectedChoices.add(choice));
+        customInput.value = existing?.customText || "";
+        noteInput.value = existing?.note || "";
+        emojiError.textContent = "";
+
+        const isToday = selectedDate === today;
+        selectedLabel.textContent = isToday ? "HEUTE" : "AUSGEWÄHLTER TAG";
+        currentTitle.textContent = isToday ? "Heute bei euch" : formatSelectedDate(selectedDate);
+        saveButton.textContent = isToday ? "Für heute speichern" : "Für diesen Tag speichern";
+        renderMoodCards(currentGrid, selectedDate);
+        refreshEmojiButtons();
+        refreshTextButtons();
+        renderCalendar();
+    };
+
+    previousMonthButton.addEventListener("click", () => {
+        displayedMonth = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() - 1, 1);
+        renderCalendar();
+    });
+
+    nextMonthButton.addEventListener("click", () => {
+        if (monthKey(displayedMonth) >= monthKey(todayDate)) return;
+        displayedMonth = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + 1, 1);
+        renderCalendar();
+    });
+
+    container.querySelector("#mood-today").addEventListener("click", () => {
+        selectedDate = today;
+        displayedMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
+        loadSelectedDate();
+    });
 
     container.querySelector("#mood-form").addEventListener("submit", (event) => {
         event.preventDefault();
@@ -242,7 +386,7 @@ export function renderMood(container, context) {
             return;
         }
 
-        const date = localToday();
+        const date = selectedDate;
         const entry = sanitizeMood({
             id: `${date}-${identity.toLowerCase()}`,
             date,
@@ -262,9 +406,14 @@ export function renderMood(container, context) {
             data.moods.push(entry);
         });
 
-        renderCurrentMoods(currentGrid);
-        context.toast("Deine Stimmung wurde gespeichert.");
+        renderMoodCards(currentGrid, selectedDate);
+        renderCalendar();
+        context.toast(date === today
+            ? "Deine Stimmung wurde gespeichert."
+            : "Deine Stimmung für diesen Tag wurde gespeichert.");
     });
+
+    loadSelectedDate();
 }
 
 export { EMOJIS, TEXT_CHOICES, sanitizeMood };
