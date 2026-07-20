@@ -19,7 +19,8 @@ service cloud.firestore {
           "invitations",
           "plans",
           "diaryEntries",
-          "wishlistItems"
+          "wishlistItems",
+          "moods"
         ];
     }
 

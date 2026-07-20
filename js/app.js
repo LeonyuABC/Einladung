@@ -24,6 +24,7 @@ import { renderCalendar, renderPlanShare } from "./calendar.js";
 import { renderDiary, renderDiaryShare } from "./diary.js";
 import { renderWishlist, renderWishlistShare } from "./wishlist.js";
 import { renderBackup } from "./backup.js";
+import { renderHomeMoods, renderMood } from "./mood.js";
 
 const main = document.querySelector("#main-content");
 const toastElement = document.querySelector("#toast");
@@ -31,7 +32,7 @@ const shareDialog = document.querySelector("#share-dialog");
 const shareOutput = document.querySelector("#share-url-output");
 const shareDialogMessage = document.querySelector("#share-dialog-message");
 const syncStatus = document.querySelector("#sync-status");
-const validRoutes = new Set(["home", "invitations", "calendar", "diary", "wishlist", "settings"]);
+const validRoutes = new Set(["home", "mood", "invitations", "calendar", "diary", "wishlist", "settings"]);
 
 let toastTimer = null;
 let shareRequest = null;
@@ -156,6 +157,13 @@ function renderHome() {
                 <div><div class="big-emoji">♡</div><h2>Yaoyu &amp; Daria</h2><p class="muted">Zwei Geräte, ein gemeinsamer Raum.</p></div>
             </aside>
         </section>
+        <section class="home-mood-section">
+            <div class="section-heading">
+                <div><p class="eyebrow">HEUTE</p><h2>Wie geht es euch?</h2></div>
+                <button class="primary-button" type="button" data-route="mood">Stimmung auswählen</button>
+            </div>
+            <div id="home-mood-grid" class="mood-person-grid"></div>
+        </section>
         <section class="module-grid" aria-label="Bereiche">
             <button class="module-link" type="button" data-route="invitations"><span class="emoji">💌</span><strong>Einladung</strong></button>
             <button class="module-link" type="button" data-route="calendar"><span class="emoji">📅</span><strong>Planungszentrum</strong></button>
@@ -176,6 +184,7 @@ function renderHome() {
     main.querySelector("#home-diary").textContent = latestDiary ? `${latestDiary.emoji || "📖"} ${latestDiary.title || "Erinnerung"}` : "Noch keine Erinnerung";
     main.querySelector("#home-diary-meta").textContent = latestDiary ? formatDate(latestDiary.date) : "Euer erstes Kapitel wartet.";
     main.querySelector("#home-matches").textContent = String(matches);
+    renderHomeMoods(main.querySelector("#home-mood-grid"));
 }
 
 function renderShare() {
@@ -212,6 +221,7 @@ function renderRoute(route = currentRoute()) {
     }
     setActiveNavigation(route);
     if (route === "home") renderHome();
+    if (route === "mood") renderMood(main, context);
     if (route === "invitations") renderInvitations(main, context);
     if (route === "calendar") renderCalendar(main, context);
     if (route === "diary") renderDiary(main, context);
@@ -277,3 +287,10 @@ initializeIdentity(() => {
     startRealtimeSync((name, items) => applyCloudCollection(name, items));
     renderRoute(currentRoute());
 });
+
+if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./service-worker.js", { scope: "./" })
+            .catch((error) => console.warn("App-Installation konnte nicht vorbereitet werden.", error));
+    });
+}

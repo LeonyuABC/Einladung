@@ -2,7 +2,7 @@
 // überschrieben wird. Alte Daten können per JSON-Backup importiert werden.
 const STORAGE_KEY = "coupleSpaceCloudCacheV1";
 const IDENTITIES = ["Yaoyu", "Daria"];
-const SHARED_COLLECTIONS = ["invitations", "plans", "diaryEntries", "wishlistItems"];
+const SHARED_COLLECTIONS = ["invitations", "plans", "diaryEntries", "wishlistItems", "moods"];
 
 let syncDiffHandler = null;
 let replaceAllHandler = null;
@@ -14,7 +14,8 @@ function emptyData(identity = null) {
         invitations: [],
         plans: [],
         diaryEntries: [],
-        wishlistItems: []
+        wishlistItems: [],
+        moods: []
     };
 }
 

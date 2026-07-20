@@ -27,6 +27,13 @@ let authenticatedCallback = null;
 let selectedIdentity = null;
 let cloudReady = false;
 
+function applyIdentityTheme(identity = null) {
+    const theme = identity === "Yaoyu" ? "blue" : "pink";
+    document.documentElement.dataset.theme = theme;
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    if (themeColor) themeColor.content = theme === "blue" ? "#6aa9d8" : "#d9688b";
+}
+
 export function updateIdentityLabel() {
     const identity = getCurrentIdentity();
     identityLabel.textContent = identity ? `Aktiv: ${identity}` : "Aktiv: –";
@@ -42,6 +49,7 @@ function resetSelection() {
 }
 
 export function showIdentitySelection() {
+    applyIdentityTheme();
     appView.hidden = true;
     identityView.hidden = false;
     resetSelection();
@@ -49,6 +57,7 @@ export function showIdentitySelection() {
 }
 
 export function showApp() {
+    applyIdentityTheme(getCurrentIdentity());
     identityView.hidden = true;
     appView.hidden = false;
     updateIdentityLabel();

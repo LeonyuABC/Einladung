@@ -3,9 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#fff7f9">
+    <meta name="theme-color" content="#d9688b">
     <meta name="description" content="Couple Space – ein gemeinsamer, synchronisierter Raum für Yaoyu und Daria.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Couple Space">
     <title>Couple Space</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,10 +23,9 @@
         <p class="eyebrow">COUPLE SPACE</p>
         <div class="brand-heart" aria-hidden="true">♡</div>
         <h1 id="identity-title">Wer bist du?</h1>
-        <p class="muted">Wähle deinen Namen. Couple Space verbindet sich im Hintergrund automatisch mit eurem gemeinsamen Raum.</p>
 
         <div id="firebase-config-warning" class="warning-notice" hidden>
-            Firebase ist noch nicht eingerichtet. Öffne zuerst <strong>FIREBASE-SETUP.md</strong> und fülle danach <strong>config.js</strong> aus.
+            Firebase ist noch nicht eingerichtet.
         </div>
 
         <div id="identity-options" class="identity-options" aria-label="Person auswählen">
@@ -28,6 +33,7 @@
                 <span class="identity-avatar" aria-hidden="true">Y</span>
                 <span>Yaoyu</span>
             </button>
+
             <button class="identity-button" type="button" data-identity="Daria">
                 <span class="identity-avatar" aria-hidden="true">D</span>
                 <span>Daria</span>
@@ -36,18 +42,32 @@
 
         <form id="pin-login-form" class="form-stack pin-form" hidden>
             <p id="pin-person" class="pin-person"></p>
+
             <label class="field">
-                <span>Deine PIN</span>
-                <input id="login-pin" name="pin" type="password" inputmode="numeric" autocomplete="off" pattern="[0-9]*" maxlength="8" required>
+                <span>PIN</span>
+                <input id="login-pin"
+                       name="pin"
+                       type="password"
+                       inputmode="numeric"
+                       autocomplete="off"
+                       pattern="[0-9]*"
+                       maxlength="8"
+                       required>
             </label>
+
             <div class="action-row pin-actions">
-                <button id="pin-login-button" class="primary-button" type="submit">Couple Space öffnen</button>
-                <button id="cancel-pin" class="text-button" type="button">Andere Person wählen</button>
+                <button id="pin-login-button" class="primary-button" type="submit">
+                    Öffnen
+                </button>
+
+                <button id="cancel-pin" class="text-button" type="button">
+                    Zurück
+                </button>
             </div>
         </form>
-        <p id="login-status" class="status-message" aria-live="polite"></p>
+
+        <p id="login-status" class="status-message" aria-live="polite" hidden></p>
         <p id="login-error" class="error-message" aria-live="polite"></p>
-        <p class="small-note">Keine Registrierung, keine E-Mail. Änderungen werden über Firebase automatisch auf beiden Geräten gespeichert.</p>
     </div>
 </section>
 

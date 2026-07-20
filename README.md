@@ -1,4 +1,4 @@
-# Couple Space：匿名联网 + PIN 版
+# Couple Space：每日心情 + 双主题 + 手机安装版
 
 这是 Yaoyu 和 Daria 共用的实时同步情侣空间。网页仍然是普通 HTML、CSS 和原生 JavaScript，不需要新的编译器、Node.js、Java 后端或自己租服务器。
 
@@ -8,14 +8,27 @@
 - 不需要 Daria 的邮箱；
 - 不发送登录邮件；
 - 打开网站后直接选择 `Yaoyu` 或 `Daria`；
-- Yaoyu 的 PIN：`029`；
+- Yaoyu 的 PIN：`0729`；
 - Daria 的 PIN：`1016`；
 - Firebase 在后台自动建立匿名会话；
 - Firestore 保存共同数据，并把修改实时同步到另一台设备；
 - 网站里的邀请直接同步，不再要求发送邀请链接或邮件；
-- 暂时不上传照片。
+- 暂时不上传照片；
+- Yaoyu 登录后使用浅蓝色主题，Daria 使用粉色主题；
+- 双方每天可各选一个心情 Emoji，并选择多个简短文字状态；
+- 网站可安装到 Android 或 iPhone 主屏幕，像小 App 一样打开。
 
 第一次运行前，请严格按照 [FIREBASE-SETUP.md](FIREBASE-SETUP.md) 完成 Firebase 后台的三个设置。
+
+## 从上一版升级
+
+1. 可选：先在旧网站的“设置与备份”中导出一次 JSON；
+2. 把压缩包中的全部文件和文件夹上传到原 GitHub 仓库根目录，覆盖旧文件；
+3. Firebase Console 进入 `Firestore Database → 规则`；
+4. 用新版 `firestore.rules` 的全部内容替换编辑器内容，点击“发布”；
+5. 等 GitHub Pages 部署完成后，在电脑和手机上刷新网站。
+
+不需要新建 Firebase 项目，不需要修改数据库地区，也不需要重新设置匿名登录。旧的邀请、计划、日记和愿望会保留；新版只新增 `moods` 集合。
 
 ## 使用流程
 
@@ -38,6 +51,9 @@ Daria 不需要 Firebase 账号，也不需要创建 Firebase 项目。只有你
 ## 已实现功能
 
 - Yaoyu / Daria 选择界面和各自 PIN；
+- 每人每天一个心情 Emoji、多个文字状态、可选自定义文字和备注；
+- Yaoyu 浅蓝主题与 Daria 粉色主题；
+- PWA 主屏幕安装支持（保持联网使用，不缓存旧程序文件）；
 - Firebase 匿名身份验证；
 - 跨手机、电脑和浏览器的 Firestore 实时同步；
 - 共同邀请，以及对邀请的站内回复；
@@ -51,10 +67,16 @@ Daria 不需要 Firebase 账号，也不需要创建 Firebase 项目。只有你
 ## 项目文件
 
 ```text
-couple-space-anonymous-pin/
+couple-space-mood-pwa/
 ├── index.html
 ├── style.css
 ├── config.js
+├── manifest.webmanifest
+├── service-worker.js
+├── icons/
+│   ├── icon.svg
+│   ├── icon-192.png
+│   └── icon-512.png
 ├── firestore.rules
 ├── FIREBASE-SETUP.md
 ├── README.md
@@ -67,6 +89,7 @@ couple-space-anonymous-pin/
     ├── invitation.js
     ├── calendar.js
     ├── diary.js
+    ├── mood.js
     ├── wishlist.js
     └── backup.js
 ```
@@ -80,6 +103,7 @@ couples/yaoyu-daria/invitations/{id}
 couples/yaoyu-daria/plans/{id}
 couples/yaoyu-daria/diaryEntries/{id}
 couples/yaoyu-daria/wishlistItems/{id}
+couples/yaoyu-daria/moods/{date-person}
 ```
 
 浏览器中的 `coupleSpaceCloudCacheV1` 只是缓存。网页顶部显示 `Synchronisiert`，才表示已经成功连接 Firestore。
@@ -97,6 +121,15 @@ couples/yaoyu-daria/wishlistItems/{id}
 5. 等待生成公开的 HTTPS 网址；
 6. 你和 Daria 打开完全相同的网址；
 7. 你选择 Yaoyu，她选择 Daria。
+
+## 安装到手机主屏幕
+
+先确认 GitHub Pages 已部署最新文件，并用手机打开公开网址。
+
+- Android（Chrome）：浏览器菜单 → `安装应用` 或 `添加到主屏幕`；
+- iPhone（Safari）：底部分享按钮 → `添加到主屏幕` → `添加`。
+
+这只是把网站安装成主屏幕小 App，数据仍通过 Firebase 联网同步。项目没有启用完整离线编辑，避免手机保留旧版本代码。
 
 不需要构建或编译。
 
@@ -117,7 +150,7 @@ couples/yaoyu-daria/wishlistItems/{id}
 
 ```js
 users: {
-    Yaoyu: { pin: "029", avatar: "Y" },
+    Yaoyu: { pin: "0729", avatar: "Y" },
     Daria: { pin: "1016", avatar: "D" }
 }
 ```
