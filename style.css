@@ -84,9 +84,9 @@ body {
     min-height: 100vh;
     margin: 0;
     background:
-        radial-gradient(circle at 8% 5%, var(--body-glow-one), transparent 31rem),
-        radial-gradient(circle at 95% 90%, var(--body-glow-two), transparent 32rem),
-        var(--background);
+            radial-gradient(circle at 8% 5%, var(--body-glow-one), transparent 31rem),
+            radial-gradient(circle at 95% 90%, var(--body-glow-two), transparent 32rem),
+            var(--background);
     color: var(--text);
     font-family: Arial, "Helvetica Neue", sans-serif;
     line-height: 1.5;
