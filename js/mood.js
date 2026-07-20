@@ -246,6 +246,7 @@ export function renderMood(container, context) {
             </section>
 
             <div class="mood-save-row">
+                <button id="mood-delete-button" class="danger-button" type="button" hidden>Eintrag löschen</button>
                 <button id="mood-save-button" class="primary-button" type="submit"></button>
             </div>
         </form>`;
@@ -262,6 +263,7 @@ export function renderMood(container, context) {
     const customInput = container.querySelector("#mood-custom-text");
     const noteInput = container.querySelector("#mood-note");
     const emojiError = container.querySelector("#mood-emoji-error");
+    const deleteButton = container.querySelector("#mood-delete-button");
     const saveButton = container.querySelector("#mood-save-button");
 
     const refreshEmojiButtons = () => {
@@ -354,6 +356,7 @@ export function renderMood(container, context) {
         const isToday = selectedDate === today;
         selectedLabel.textContent = isToday ? "HEUTE" : "AUSGEWÄHLTER TAG";
         currentTitle.textContent = isToday ? "Heute bei euch" : formatSelectedDate(selectedDate);
+        deleteButton.hidden = !existing;
         saveButton.textContent = isToday ? "Für heute speichern" : "Für diesen Tag speichern";
         renderMoodCards(currentGrid, selectedDate);
         refreshEmojiButtons();
@@ -376,6 +379,23 @@ export function renderMood(container, context) {
         selectedDate = today;
         displayedMonth = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
         loadSelectedDate();
+    });
+
+    deleteButton.addEventListener("click", () => {
+        const existing = moodForDate(identity, selectedDate);
+        if (!existing) return;
+        const dateLabel = selectedDate === today ? "heute" : formatSelectedDate(selectedDate);
+        if (!window.confirm(`Möchtest du deinen Eintrag für ${dateLabel} wirklich löschen?`)) return;
+
+        updateData((data) => {
+            data.moods = (data.moods || []).filter((item) => {
+                const clean = sanitizeMood(item);
+                return !(clean && clean.date === selectedDate && clean.identity === identity);
+            });
+        });
+
+        loadSelectedDate();
+        context.toast("Dein Eintrag wurde gelöscht.");
     });
 
     container.querySelector("#mood-form").addEventListener("submit", (event) => {
@@ -406,8 +426,7 @@ export function renderMood(container, context) {
             data.moods.push(entry);
         });
 
-        renderMoodCards(currentGrid, selectedDate);
-        renderCalendar();
+        loadSelectedDate();
         context.toast(date === today
             ? "Deine Stimmung wurde gespeichert."
             : "Deine Stimmung für diesen Tag wurde gespeichert.");
