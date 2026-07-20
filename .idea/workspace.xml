@@ -5,7 +5,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="600d1489-51f8-4d7f-bdb9-df4f1708572a" name="Changes" comment="Version 4">
-      <change beforePath="$PROJECT_DIR$/js/mood.js" beforeDir="false" afterPath="$PROJECT_DIR$/js/mood.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/style.css" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -80,7 +79,23 @@
       <option name="project" value="LOCAL" />
       <updated>1784589788841</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="Version 4">
+      <option name="closed" value="true" />
+      <created>1784590292672</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1784590292672</updated>
+    </task>
+    <task id="LOCAL-00007" summary="Version 4">
+      <option name="closed" value="true" />
+      <created>1784590298353</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1784590298353</updated>
+    </task>
+    <option name="localTasksCounter" value="8" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">

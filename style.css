@@ -1584,3 +1584,18 @@ details.entry-details > summary::-webkit-details-marker {
         transition-duration: 0.01ms !important;
     }
 }
+
+.mood-form > .mood-column + .mood-column {
+    margin-top: 0 !important;
+}
+
+@media (min-width: 821px) {
+    .mood-form {
+        align-items: stretch;
+    }
+
+    .mood-form > .mood-column {
+        align-self: stretch;
+        height: auto;
+    }
+}
