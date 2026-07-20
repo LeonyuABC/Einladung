@@ -1,16 +1,82 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Eine kleine Frage</title>
+    <meta name="theme-color" content="#fff7f9">
+    <meta name="description" content="Couple Space – ein kleiner lokaler Planungsraum für Yaoyu und Daria.">
+    <title>Couple Space</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <main class="card">
-        <p class="step">01 / 03</p>
-        <h1>Hi Daria, würdest du mit mir ausgehen?</h1>
-        <a class="primary-button" href="seite2.html">Ja</a>
-    </main>
+<div class="background-orb orb-one" aria-hidden="true"></div>
+<div class="background-orb orb-two" aria-hidden="true"></div>
+
+<section id="identity-view" class="identity-screen" aria-labelledby="identity-title" hidden>
+    <div class="card identity-card">
+        <p class="eyebrow">COUPLE SPACE</p>
+        <div class="brand-heart" aria-hidden="true">♡</div>
+        <h1 id="identity-title">Wer bist du?</h1>
+        <p class="muted">Wähle deine lokale Identität auf diesem Gerät.</p>
+        <div class="identity-options">
+            <button class="identity-button" type="button" data-identity="Yaoyu">
+                <span class="identity-avatar">Y</span>
+                <span>Yaoyu</span>
+            </button>
+            <button class="identity-button" type="button" data-identity="Daria">
+                <span class="identity-avatar">D</span>
+                <span>Daria</span>
+            </button>
+        </div>
+        <p class="small-note">Kein echtes Login: Die Auswahl gilt nur in diesem Browser.</p>
+    </div>
+</section>
+
+<div id="app-view" class="app-shell" hidden>
+    <header class="topbar">
+        <button class="brand-button" type="button" data-route="home" aria-label="Zur Startseite">
+            <span class="brand-mark" aria-hidden="true">♡</span>
+            <span>Couple Space</span>
+        </button>
+        <div class="identity-status">
+            <span id="identity-label">Aktuell: –</span>
+            <button id="switch-identity" class="text-button" type="button">Identität wechseln</button>
+        </div>
+    </header>
+
+    <nav class="main-nav" aria-label="Hauptnavigation">
+        <button type="button" data-route="home">🏠 <span>Start</span></button>
+        <button type="button" data-route="invitations">💌 <span>Einladung</span></button>
+        <button type="button" data-route="calendar">📅 <span>Planung</span></button>
+        <button type="button" data-route="diary">📖 <span>Tagebuch</span></button>
+        <button type="button" data-route="wishlist">✨ <span>Wünsche</span></button>
+    </nav>
+
+    <main id="main-content" class="main-content" tabindex="-1"></main>
+
+    <footer class="site-footer">
+        <span>Nur auf diesem Gerät gespeichert</span>
+        <button class="text-button" type="button" data-route="settings">⚙️ Einstellungen &amp; Backup</button>
+    </footer>
+</div>
+
+<dialog id="share-dialog" class="share-dialog">
+    <form method="dialog" class="dialog-card">
+        <button class="dialog-close" value="close" aria-label="Schließen">×</button>
+        <p class="eyebrow">LINK TEILEN</p>
+        <h2>Link ist bereit</h2>
+        <p id="share-dialog-message" class="muted"></p>
+        <label class="field">
+            <span>Link</span>
+            <textarea id="share-url-output" rows="5" readonly></textarea>
+        </label>
+        <button id="copy-dialog-link" class="primary-button" type="button">Link kopieren</button>
+        <button class="secondary-button" value="close">Schließen</button>
+    </form>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<script type="module" src="js/app.js"></script>
 </body>
 </html>
