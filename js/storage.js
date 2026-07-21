@@ -2,7 +2,7 @@
 // überschrieben wird. Alte Daten können per JSON-Backup importiert werden.
 const STORAGE_KEY = "coupleSpaceCloudCacheV1";
 const IDENTITIES = ["Yaoyu", "Daria"];
-const SHARED_COLLECTIONS = ["invitations", "plans", "diaryEntries", "wishlistItems", "moods"];
+const SHARED_COLLECTIONS = ["invitations", "plans", "diaryEntries", "wishlistItems", "moods", "notifications"];
 
 let syncDiffHandler = null;
 let replaceAllHandler = null;
@@ -15,7 +15,8 @@ function emptyData(identity = null) {
         plans: [],
         diaryEntries: [],
         wishlistItems: [],
-        moods: []
+        moods: [],
+        notifications: []
     };
 }
 
@@ -84,6 +85,7 @@ export function updateData(change) {
     const before = loadData();
     const draft = JSON.parse(JSON.stringify(before));
     const changed = change(draft) || draft;
+    appendChangeNotifications(before, changed);
     const after = normalizeData({ ...changed, version: 1 });
     if (!saveLocalData(after)) throw new Error("STORAGE_WRITE_FAILED");
     if (syncDiffHandler) {
@@ -92,6 +94,87 @@ export function updateData(change) {
         });
     }
     return after;
+}
+
+function itemMap(items) {
+    return new Map((Array.isArray(items) ? items : []).map((item) => [item.id, item]));
+}
+
+function sameValue(left, right) {
+    return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function notificationMessage(collectionName, beforeItem, afterItem, actor) {
+    if (collectionName === "invitations") {
+        if (!beforeItem) return `${actor} hat dir eine Einladung geschickt.`;
+        if (!sameValue(beforeItem.response, afterItem.response) && afterItem.response?.respondedBy === actor) {
+            return `${actor} hat auf deine Einladung geantwortet.`;
+        }
+        return `${actor} hat eine Einladung aktualisiert.`;
+    }
+    if (collectionName === "plans") {
+        if (!beforeItem) return `${actor} hat einen neuen Plan erstellt.`;
+        if (!sameValue(beforeItem.reactions?.[actor], afterItem.reactions?.[actor])) {
+            return `${actor} hat auf einen Plan reagiert.`;
+        }
+        return `${actor} hat einen Plan aktualisiert.`;
+    }
+    if (collectionName === "diaryEntries") {
+        if (!beforeItem) return `${actor} hat einen Tagebucheintrag hinzugefügt.`;
+        if (!sameValue(beforeItem.contributions?.[actor], afterItem.contributions?.[actor])) {
+            return `${actor} hat einen Tagebucheintrag bewertet.`;
+        }
+        return `${actor} hat einen Tagebucheintrag aktualisiert.`;
+    }
+    if (collectionName === "wishlistItems") {
+        if (!beforeItem) return `${actor} hat einen neuen Wunsch hinzugefügt.`;
+        if (!sameValue(beforeItem.reactions?.[actor], afterItem.reactions?.[actor])) {
+            return `${actor} hat auf einen Wunsch reagiert.`;
+        }
+        return `${actor} hat einen Wunsch aktualisiert.`;
+    }
+    if (collectionName === "moods") return `${actor} hat die Stimmung aktualisiert.`;
+    return "";
+}
+
+function appendChangeNotifications(before, after) {
+    const actor = before.currentIdentity;
+    if (!IDENTITIES.includes(actor) || !isRecord(after)) return;
+    const recipient = actor === "Yaoyu" ? "Daria" : "Yaoyu";
+    const routes = {
+        invitations: "invitations",
+        plans: "calendar",
+        diaryEntries: "diary",
+        wishlistItems: "wishlist",
+        moods: "mood"
+    };
+    const additions = [];
+
+    Object.keys(routes).forEach((collectionName) => {
+        const oldItems = itemMap(before[collectionName]);
+        const newItems = itemMap(after[collectionName]);
+        for (const [id, afterItem] of newItems) {
+            const beforeItem = oldItems.get(id) || null;
+            if (beforeItem && sameValue(beforeItem, afterItem)) continue;
+            const message = notificationMessage(collectionName, beforeItem, afterItem, actor);
+            if (!message) continue;
+            additions.push({
+                id: generateId(),
+                recipient,
+                actor,
+                route: routes[collectionName],
+                sourceCollection: collectionName,
+                sourceId: String(id),
+                message,
+                createdAt: new Date().toISOString(),
+                read: false
+            });
+        }
+    });
+
+    if (!additions.length) return;
+    if (!Array.isArray(after.notifications)) after.notifications = [];
+    after.notifications.push(...additions);
 }
 
 export async function replaceSharedData(value) {

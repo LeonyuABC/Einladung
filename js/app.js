@@ -4,7 +4,8 @@ import {
     loadData,
     formatDate,
     getCurrentIdentity,
-    localToday
+    localToday,
+    updateData
 } from "./storage.js";
 import {
     replaceAllCloudData,
@@ -32,12 +33,85 @@ const shareDialog = document.querySelector("#share-dialog");
 const shareOutput = document.querySelector("#share-url-output");
 const shareDialogMessage = document.querySelector("#share-dialog-message");
 const syncStatus = document.querySelector("#sync-status");
+const notificationArea = document.querySelector("#notification-area");
+const notificationButton = document.querySelector("#notification-button");
+const notificationDot = document.querySelector("#notification-dot");
+const notificationPanel = document.querySelector("#notification-panel");
+const notificationList = document.querySelector("#notification-list");
+const notificationEmpty = document.querySelector("#notification-empty");
+const markNotificationsReadButton = document.querySelector("#mark-notifications-read");
 const validRoutes = new Set(["home", "mood", "invitations", "calendar", "diary", "wishlist", "settings"]);
 
 let toastTimer = null;
 let shareRequest = null;
 let shareError = null;
 const prefills = new Map();
+
+function ownNotifications() {
+    const identity = getCurrentIdentity();
+    return (loadData().notifications || [])
+        .filter((item) => item?.recipient === identity && typeof item.message === "string")
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+}
+
+function notificationTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString("de-DE", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
+
+function setNotificationRead(id) {
+    updateData((data) => {
+        const notification = data.notifications.find((item) => item.id === id);
+        if (notification && notification.recipient === getCurrentIdentity()) {
+            notification.read = true;
+            notification.readAt = new Date().toISOString();
+        }
+        return data;
+    });
+}
+
+function renderNotificationCenter() {
+    const notifications = ownNotifications();
+    const unread = notifications.filter((item) => !item.read);
+    notificationDot.hidden = unread.length === 0;
+    notificationButton.setAttribute("aria-label", unread.length
+        ? `Benachrichtigungen, ${unread.length} ungelesen`
+        : "Benachrichtigungen");
+    markNotificationsReadButton.hidden = unread.length === 0;
+    notificationEmpty.hidden = notifications.length !== 0;
+    notificationList.replaceChildren();
+
+    notifications.slice(0, 30).forEach((notification) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `notification-item${notification.read ? "" : " unread"}`;
+        const message = document.createElement("span");
+        message.className = "notification-message";
+        message.textContent = notification.message;
+        const time = document.createElement("span");
+        time.className = "notification-time";
+        time.textContent = notificationTime(notification.createdAt);
+        button.append(message, time);
+        button.addEventListener("click", () => {
+            if (!notification.read) setNotificationRead(notification.id);
+            notificationPanel.hidden = true;
+            notificationButton.setAttribute("aria-expanded", "false");
+            navigate(notification.route || "home");
+        });
+        notificationList.append(button);
+    });
+}
+
+function closeNotificationPanel() {
+    notificationPanel.hidden = true;
+    notificationButton.setAttribute("aria-expanded", "false");
+}
 
 try {
     shareRequest = readShareParameters();
@@ -215,6 +289,7 @@ function renderRoute(route = currentRoute()) {
     }
     showApp();
     updateIdentityLabel();
+    renderNotificationCenter();
     if (shareRequest || shareError) {
         renderShare();
         return;
@@ -237,6 +312,41 @@ document.addEventListener("click", (event) => {
     if (!routeButton) return;
     event.preventDefault();
     navigate(routeButton.dataset.route);
+});
+
+notificationButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const willOpen = notificationPanel.hidden;
+    if (willOpen) renderNotificationCenter();
+    notificationPanel.hidden = !willOpen;
+    notificationButton.setAttribute("aria-expanded", String(willOpen));
+});
+
+notificationPanel.addEventListener("click", (event) => event.stopPropagation());
+
+markNotificationsReadButton.addEventListener("click", () => {
+    const identity = getCurrentIdentity();
+    updateData((data) => {
+        data.notifications.forEach((notification) => {
+            if (notification.recipient === identity && !notification.read) {
+                notification.read = true;
+                notification.readAt = new Date().toISOString();
+            }
+        });
+        return data;
+    });
+    renderNotificationCenter();
+});
+
+document.addEventListener("click", (event) => {
+    if (!notificationPanel.hidden && !notificationArea.contains(event.target)) closeNotificationPanel();
+});
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !notificationPanel.hidden) {
+        closeNotificationPanel();
+        notificationButton.focus();
+    }
 });
 
 document.querySelector("#copy-dialog-link").addEventListener("click", async () => {
@@ -270,6 +380,7 @@ window.addEventListener("couple-space-cloud-data", () => {
     window.clearTimeout(cloudRefreshTimer);
     cloudRefreshTimer = window.setTimeout(() => {
         if (!hasIdentity()) return;
+        renderNotificationCenter();
         if (main.querySelector("form:focus-within")) {
             toast("Neue gemeinsame Daten sind angekommen. Nach dem Speichern wird die Ansicht aktualisiert.");
             return;

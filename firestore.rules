@@ -20,7 +20,8 @@ service cloud.firestore {
           "plans",
           "diaryEntries",
           "wishlistItems",
-          "moods"
+          "moods",
+          "notifications"
         ];
     }
 

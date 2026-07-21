@@ -19,7 +19,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
 import { CONFIG } from "../config.js";
 
-const COLLECTIONS = ["invitations", "plans", "diaryEntries", "wishlistItems", "moods"];
+const COLLECTIONS = ["invitations", "plans", "diaryEntries", "wishlistItems", "moods", "notifications"];
 
 let firebaseApp = null;
 let auth = null;
