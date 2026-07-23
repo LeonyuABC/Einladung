@@ -30,6 +30,19 @@ const TEXT_CHOICES = [
 
 const IDENTITIES = ["Yaoyu", "Daria"];
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const MOOD_RESPONSE_EMOJIS = ["❤️", "🫂", "😊", "🥺", "💪", "😘"];
+
+function sanitizeMoodResponse(value) {
+    if (!value || typeof value !== "object") return null;
+    const emoji = MOOD_RESPONSE_EMOJIS.includes(value.emoji) ? value.emoji : "";
+    const message = safeText(value.message, 180);
+    if (!emoji && !message) return null;
+    return {
+        emoji,
+        message,
+        respondedAt: safeText(value.respondedAt, 50) || new Date().toISOString()
+    };
+}
 
 function sanitizeMood(value) {
     if (!value || typeof value !== "object") return null;
@@ -50,6 +63,10 @@ function sanitizeMood(value) {
         choices,
         customText: safeText(value.customText, 120),
         note: safeText(value.note, 500),
+        responses: {
+            Yaoyu: sanitizeMoodResponse(value.responses?.Yaoyu),
+            Daria: sanitizeMoodResponse(value.responses?.Daria)
+        },
         updatedAt: safeText(value.updatedAt, 50) || new Date().toISOString()
     };
 }
@@ -116,9 +133,119 @@ function addMoodDetails(container, mood) {
         note.textContent = mood.note;
         container.append(note);
     }
+
+    const responses = IDENTITIES.filter((identity) => mood.responses?.[identity]);
+    if (responses.length) {
+        const responseList = document.createElement("div");
+        responseList.className = "mood-response-list";
+        responses.forEach((identity) => {
+            const response = mood.responses[identity];
+            const item = document.createElement("div");
+            item.className = "mood-response-summary";
+            const sender = document.createElement("strong");
+            sender.textContent = identity;
+            const content = document.createElement("span");
+            content.textContent = [response.emoji, response.message].filter(Boolean).join(" ");
+            item.append(sender, content);
+            responseList.append(item);
+        });
+        container.append(responseList);
+    }
 }
 
-function renderMoodCards(container, date, data = loadData()) {
+function saveMoodResponse(date, moodOwner, response) {
+    updateData((data) => {
+        const index = (data.moods || []).findIndex((item) => {
+            const clean = sanitizeMood(item);
+            return clean && clean.date === date && clean.identity === moodOwner;
+        });
+        if (index < 0) return data;
+        const clean = sanitizeMood(data.moods[index]);
+        clean.responses[getCurrentIdentity()] = sanitizeMoodResponse(response);
+        data.moods[index] = clean;
+        return data;
+    });
+}
+
+function appendMoodResponseForm(card, mood, date, context, onChanged) {
+    const identity = getCurrentIdentity();
+    if (!mood || mood.identity === identity) return;
+    const existing = mood.responses?.[identity] || null;
+    let selectedEmoji = existing?.emoji || "";
+
+    const form = document.createElement("form");
+    form.className = "mood-response-form";
+    const heading = document.createElement("h4");
+    heading.textContent = existing ? "Deine Antwort bearbeiten" : "Darauf antworten";
+    const emojiRow = document.createElement("div");
+    emojiRow.className = "mood-response-emojis";
+    const message = document.createElement("textarea");
+    message.name = "message";
+    message.maxLength = 180;
+    message.rows = 2;
+    message.placeholder = "Eine kleine Nachricht ...";
+    message.value = existing?.message || "";
+    const error = document.createElement("p");
+    error.className = "error-message";
+    error.setAttribute("aria-live", "polite");
+
+    function refreshEmojiButtons() {
+        emojiRow.replaceChildren(...MOOD_RESPONSE_EMOJIS.map((emoji) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = `mood-response-emoji${selectedEmoji === emoji ? " selected" : ""}`;
+            button.textContent = emoji;
+            button.setAttribute("aria-label", `Mit ${emoji} antworten`);
+            button.addEventListener("click", () => {
+                selectedEmoji = selectedEmoji === emoji ? "" : emoji;
+                error.textContent = "";
+                refreshEmojiButtons();
+            });
+            return button;
+        }));
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "action-row";
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.className = "primary-button";
+    save.textContent = existing ? "Antwort aktualisieren" : "Antwort speichern";
+    actions.append(save);
+    if (existing) {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "text-button";
+        remove.textContent = "Antwort entfernen";
+        remove.addEventListener("click", () => {
+            saveMoodResponse(date, mood.identity, null);
+            context.toast("Deine Antwort wurde entfernt.");
+            onChanged();
+        });
+        actions.append(remove);
+    }
+
+    form.append(heading, emojiRow, message, error, actions);
+    form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const responseMessage = safeText(message.value, 180);
+        if (!selectedEmoji && !responseMessage) {
+            error.textContent = "Bitte wähle ein Emoji oder schreibe eine kurze Nachricht.";
+            return;
+        }
+        saveMoodResponse(date, mood.identity, {
+            emoji: selectedEmoji,
+            message: responseMessage,
+            respondedAt: new Date().toISOString()
+        });
+        context.toast("Deine Antwort wird synchronisiert.");
+        onChanged();
+    });
+    refreshEmojiButtons();
+    card.append(form);
+}
+
+function renderMoodCards(container, date, data = loadData(), options = {}) {
     container.replaceChildren();
     IDENTITIES.forEach((identity) => {
         const card = document.createElement("article");
@@ -128,7 +255,11 @@ function renderMoodCards(container, date, data = loadData()) {
         heading.textContent = identity;
         card.append(heading);
 
-        addMoodDetails(card, moodForDate(identity, date, data));
+        const mood = moodForDate(identity, date, data);
+        addMoodDetails(card, mood);
+        if (options.interactive && options.context && typeof options.onChanged === "function") {
+            appendMoodResponseForm(card, mood, date, options.context, options.onChanged);
+        }
         container.append(card);
     });
 }
@@ -358,7 +489,11 @@ export function renderMood(container, context) {
         currentTitle.textContent = isToday ? "Heute bei euch" : formatSelectedDate(selectedDate);
         deleteButton.hidden = !existing;
         saveButton.textContent = isToday ? "Für heute speichern" : "Für diesen Tag speichern";
-        renderMoodCards(currentGrid, selectedDate);
+        renderMoodCards(currentGrid, selectedDate, loadData(), {
+            interactive: true,
+            context,
+            onChanged: loadSelectedDate
+        });
         refreshEmojiButtons();
         refreshTextButtons();
         renderCalendar();
@@ -407,6 +542,7 @@ export function renderMood(container, context) {
         }
 
         const date = selectedDate;
+        const existing = moodForDate(identity, date);
         const entry = sanitizeMood({
             id: `${date}-${identity.toLowerCase()}`,
             date,
@@ -415,6 +551,7 @@ export function renderMood(container, context) {
             choices: [...selectedChoices],
             customText: customInput.value,
             note: noteInput.value,
+            responses: existing?.responses || { Yaoyu: null, Daria: null },
             updatedAt: new Date().toISOString()
         });
 

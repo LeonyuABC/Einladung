@@ -87,7 +87,7 @@ function renderNotificationCenter() {
     notificationEmpty.hidden = notifications.length !== 0;
     notificationList.replaceChildren();
 
-    notifications.slice(0, 30).forEach((notification) => {
+    notifications.slice(0, 20).forEach((notification) => {
         const button = document.createElement("button");
         button.type = "button";
         button.className = `notification-item${notification.read ? "" : " unread"}`;
@@ -218,7 +218,8 @@ function renderHome() {
     const latestDiary = data.diaryEntries
         .slice()
         .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
-    const matches = data.wishlistItems.filter((wish) => wish.reactions?.Yaoyu === "HEART" && wish.reactions?.Daria === "HEART").length;
+    const acceptedWish = (value) => ["ACCEPTED", "HEART"].includes(value);
+    const matches = data.wishlistItems.filter((wish) => acceptedWish(wish.reactions?.Yaoyu) && acceptedWish(wish.reactions?.Daria)).length;
 
     main.innerHTML = `
         <section class="home-hero">

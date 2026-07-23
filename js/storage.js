@@ -3,6 +3,8 @@
 const STORAGE_KEY = "coupleSpaceCloudCacheV1";
 const IDENTITIES = ["Yaoyu", "Daria"];
 const SHARED_COLLECTIONS = ["invitations", "plans", "diaryEntries", "wishlistItems", "moods", "notifications"];
+const NOTIFICATION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const NOTIFICATION_MAX_COUNT_PER_PERSON = 20;
 
 let syncDiffHandler = null;
 let replaceAllHandler = null;
@@ -29,11 +31,29 @@ function cleanArray(value) {
     return value.filter((item) => isRecord(item) && typeof item.id === "string" && item.id.length <= 1000);
 }
 
+function pruneNotifications(value, now = Date.now()) {
+    const cutoff = now - NOTIFICATION_MAX_AGE_MS;
+    const byRecipient = new Map(IDENTITIES.map((identity) => [identity, []]));
+
+    cleanArray(value).forEach((notification) => {
+        if (!IDENTITIES.includes(notification.recipient)) return;
+        const timestamp = Date.parse(notification.createdAt);
+        if (!Number.isFinite(timestamp) || timestamp < cutoff) return;
+        byRecipient.get(notification.recipient).push(notification);
+    });
+
+    return IDENTITIES.flatMap((identity) => byRecipient.get(identity)
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+        .slice(0, NOTIFICATION_MAX_COUNT_PER_PERSON));
+}
+
 export function normalizeData(value) {
     const clean = emptyData();
     if (!isRecord(value) || value.version !== 1) return clean;
     clean.currentIdentity = IDENTITIES.includes(value.currentIdentity) ? value.currentIdentity : null;
-    SHARED_COLLECTIONS.forEach((name) => { clean[name] = cleanArray(value[name]); });
+    SHARED_COLLECTIONS.forEach((name) => {
+        clean[name] = name === "notifications" ? pruneNotifications(value[name]) : cleanArray(value[name]);
+    });
     return clean;
 }
 
@@ -73,12 +93,23 @@ export function configureCloudStorage({ syncDiff, replaceAll }) {
 export function applyCloudCollection(name, items) {
     if (!SHARED_COLLECTIONS.includes(name)) return;
     const data = loadData();
-    data[name] = cleanArray(items).map((item) => {
+    const cloudItems = cleanArray(items).map((item) => {
         const { cloudUpdatedAt, ...record } = item;
         return record;
     });
+    data[name] = name === "notifications" ? pruneNotifications(cloudItems) : cloudItems;
     saveLocalData(data);
     window.dispatchEvent(new CustomEvent("couple-space-cloud-data", { detail: { collection: name } }));
+
+    // Veraltete oder überzählige Benachrichtigungen werden auch in Firestore
+    // entfernt, damit sie nicht bei jedem neuen Gerät erneut auftauchen.
+    if (name === "notifications" && syncDiffHandler && cloudItems.length !== data[name].length) {
+        const before = { ...data, notifications: cloudItems };
+        const after = { ...data, notifications: data[name] };
+        Promise.resolve(syncDiffHandler(before, after)).catch(() => {
+            // Der sichtbare Synchronisationsstatus wird von cloud.js gesetzt.
+        });
+    }
 }
 
 export function updateData(change) {
@@ -86,6 +117,7 @@ export function updateData(change) {
     const draft = JSON.parse(JSON.stringify(before));
     const changed = change(draft) || draft;
     appendChangeNotifications(before, changed);
+    changed.notifications = pruneNotifications(changed.notifications);
     const after = normalizeData({ ...changed, version: 1 });
     if (!saveLocalData(after)) throw new Error("STORAGE_WRITE_FAILED");
     if (syncDiffHandler) {
@@ -108,7 +140,16 @@ function notificationMessage(collectionName, beforeItem, afterItem, actor) {
     if (collectionName === "invitations") {
         if (!beforeItem) return `${actor} hat dir eine Einladung geschickt.`;
         if (!sameValue(beforeItem.response, afterItem.response) && afterItem.response?.respondedBy === actor) {
-            return `${actor} hat auf deine Einladung geantwortet.`;
+            const answers = {
+                ACCEPTED: "zugesagt",
+                HEART: "zugesagt",
+                PENDING: "mit Vielleicht geantwortet",
+                REJECTED: "abgesagt",
+                NO_TIME: "abgesagt",
+                SUGGEST_OTHER_TIME: "einen anderen Zeitpunkt vorgeschlagen",
+                OTHER_DATE: "einen anderen Zeitpunkt vorgeschlagen"
+            };
+            return `${actor} hat auf deine Einladung ${answers[afterItem.response.answer] || "geantwortet"}.`;
         }
         return `${actor} hat eine Einladung aktualisiert.`;
     }
@@ -129,11 +170,24 @@ function notificationMessage(collectionName, beforeItem, afterItem, actor) {
     if (collectionName === "wishlistItems") {
         if (!beforeItem) return `${actor} hat einen neuen Wunsch hinzugefügt.`;
         if (!sameValue(beforeItem.reactions?.[actor], afterItem.reactions?.[actor])) {
-            return `${actor} hat auf einen Wunsch reagiert.`;
+            const answers = {
+                ACCEPTED: "zugesagt",
+                HEART: "zugesagt",
+                PENDING: "mit Vielleicht geantwortet",
+                REJECTED: "abgelehnt",
+                NOT_INTERESTED: "abgelehnt",
+                SUGGEST_OTHER_TIME: "einen anderen Zeitpunkt vorgeschlagen"
+            };
+            return `${actor} hat auf einen Wunsch ${answers[afterItem.reactions?.[actor]] || "geantwortet"}.`;
         }
         return `${actor} hat einen Wunsch aktualisiert.`;
     }
-    if (collectionName === "moods") return `${actor} hat die Stimmung aktualisiert.`;
+    if (collectionName === "moods") {
+        if (beforeItem && !sameValue(beforeItem.responses?.[actor], afterItem.responses?.[actor])) {
+            return `${actor} hat auf deine Stimmung reagiert.`;
+        }
+        return `${actor} hat die Stimmung aktualisiert.`;
+    }
     return "";
 }
 

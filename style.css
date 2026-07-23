@@ -1750,3 +1750,142 @@ details.entry-details > summary::-webkit-details-marker {
         height: auto;
     }
 }
+
+/* Erweiterte Antworten, Wunschbearbeitung und Stimmungsreaktionen */
+.badge.warning {
+    background: #fff0d8;
+    color: #8a633c;
+}
+
+.badge.danger {
+    background: #fde3ea;
+    color: #9a3f5b;
+}
+
+.response-choice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.response-choice {
+    min-height: 104px;
+    padding: 17px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 6px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-small);
+    background: var(--surface-soft);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: 150ms ease;
+}
+
+.response-choice:hover,
+.response-choice:focus-visible {
+    border-color: var(--primary);
+    background: var(--hover-soft);
+    transform: translateY(-1px);
+}
+
+.response-choice span {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.suggestion-fields,
+.inline-edit-panel {
+    margin-top: 15px;
+}
+
+.inline-edit-panel {
+    padding: 17px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-small);
+    background: var(--surface-soft);
+}
+
+.inline-edit-panel h4,
+.mood-response-form h4 {
+    margin: 0;
+}
+
+.wish-budget {
+    font-weight: 700;
+    color: var(--accent-text);
+}
+
+.compact-notice {
+    margin-top: 10px;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+}
+
+.mood-response-list {
+    display: grid;
+    gap: 7px;
+    margin-top: 14px;
+}
+
+.mood-response-summary {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.72);
+    font-size: 0.9rem;
+}
+
+.mood-response-summary strong {
+    flex: 0 0 auto;
+}
+
+.mood-response-form {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+
+.mood-response-form textarea {
+    width: 100%;
+    resize: vertical;
+}
+
+.mood-response-emojis {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.mood-response-emoji {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border: 2px solid var(--border);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.78);
+    font-size: 1.15rem;
+    cursor: pointer;
+}
+
+.mood-response-emoji:hover,
+.mood-response-emoji.selected {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+}
+
+@media (max-width: 700px) {
+    .response-choice-grid {
+        grid-template-columns: 1fr;
+    }
+}

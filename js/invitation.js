@@ -15,6 +15,7 @@ import { isPlainObject } from "./share.js";
 import { PLAN_CATEGORIES } from "./calendar.js";
 
 const TIMES = ["Vormittags", "Nachmittags", "Abends", "Ganzer Tag", "Egal", "Keine Auswahl"];
+const RESPONSE_STATUSES = ["ACCEPTED", "PENDING", "REJECTED", "SUGGEST_OTHER_TIME"];
 const ACTIVITIES = [
     "🎬 Kino",
     "☕ Café",
@@ -44,6 +45,36 @@ function safeDateChoice(value) {
 
 function displayDateChoice(value) {
     return isIsoDate(value) ? formatDate(value, { weekday: "long" }) : value;
+}
+
+function normalizeResponseAnswer(value, fallback = "ACCEPTED") {
+    const legacy = {
+        HEART: "ACCEPTED",
+        NO_TIME: "REJECTED",
+        OTHER_DATE: "SUGGEST_OTHER_TIME"
+    };
+    const normalized = legacy[value] || value;
+    return RESPONSE_STATUSES.includes(normalized) ? normalized : fallback;
+}
+
+function responseStatusLabel(response) {
+    const answer = normalizeResponseAnswer(response?.answer);
+    if (answer === "ACCEPTED") return "Zugesagt";
+    if (answer === "PENDING") return "Vielleicht";
+    if (answer === "REJECTED") return "Abgesagt";
+    return "Neuer Termin vorgeschlagen";
+}
+
+function responseBadgeClass(response) {
+    const answer = normalizeResponseAnswer(response?.answer);
+    if (answer === "ACCEPTED") return " success";
+    if (answer === "PENDING" || answer === "SUGGEST_OTHER_TIME") return " warning";
+    if (answer === "REJECTED") return " danger";
+    return "";
+}
+
+function canCreatePlanFromResponse(response) {
+    return ["ACCEPTED", "SUGGEST_OTHER_TIME"].includes(normalizeResponseAnswer(response?.answer));
 }
 
 export function sanitizeInvitation(value) {
@@ -97,6 +128,7 @@ export function sanitizeInvitationResponse(value) {
         originalInvitation: null
     };
     if (value.type === "OPEN_SELECTION_RESPONSE") {
+        response.answer = normalizeResponseAnswer(value.answer);
         response.dateChoice = safeDateChoice(value.dateChoice);
         response.timeChoice = TIMES.includes(value.timeChoice) ? value.timeChoice : "Keine Auswahl";
         response.activities = Array.isArray(value.activities)
@@ -104,10 +136,12 @@ export function sanitizeInvitationResponse(value) {
             : [];
         response.otherActivityText = safeText(value.otherActivityText, 300);
     } else {
-        if (!["HEART", "NO_TIME", "OTHER_DATE"].includes(value.answer)) throw new Error("INVALID_RESPONSE");
-        response.answer = value.answer;
-        response.suggestedDate = value.answer === "OTHER_DATE" && isIsoDate(value.suggestedDate) ? value.suggestedDate : "";
+        response.answer = normalizeResponseAnswer(value.answer, "");
+        if (!response.answer) throw new Error("INVALID_RESPONSE");
     }
+    response.suggestedDate = response.answer === "SUGGEST_OTHER_TIME" && isIsoDate(value.suggestedDate) ? value.suggestedDate : "";
+    response.suggestedTime = response.answer === "SUGGEST_OTHER_TIME" ? safeText(value.suggestedTime, 80) : "";
+    response.suggestionText = response.answer === "SUGGEST_OTHER_TIME" ? safeText(value.suggestionText, 300) : "";
     if (value.originalInvitation) {
         try { response.originalInvitation = sanitizeInvitation(value.originalInvitation); } catch (error) { response.originalInvitation = null; }
     }
@@ -159,28 +193,39 @@ function saveNewInvitation(invitation) {
 }
 
 function responseSummary(response) {
+    const answer = normalizeResponseAnswer(response.answer);
+    if (answer === "PENDING") return "⏳ Vielleicht – noch offen";
+    if (answer === "REJECTED") return "❌ Leider nicht";
+    if (answer === "SUGGEST_OTHER_TIME") {
+        const details = [];
+        if (response.suggestedDate) details.push(formatDate(response.suggestedDate));
+        if (response.suggestedTime) details.push(response.suggestedTime);
+        if (response.suggestionText) details.push(response.suggestionText);
+        return `🔁 Anderen Zeitpunkt vorgeschlagen${details.length ? `: ${details.join(" · ")}` : ""}`;
+    }
     if (response.type === "OPEN_SELECTION_RESPONSE") {
         const activities = response.activities.length ? response.activities.join(", ") : "Keine Auswahl";
-        return `${displayDateChoice(response.dateChoice)} · ${response.timeChoice} · ${activities}`;
+        return `✅ Zugesagt · ${displayDateChoice(response.dateChoice)} · ${response.timeChoice} · ${activities}`;
     }
-    if (response.answer === "HEART") return "❤️ Passt mir";
-    if (response.answer === "NO_TIME") return "🥀 Keine Zeit";
-    return `🔁 ${formatDate(response.suggestedDate)}`;
+    return "✅ Zugesagt";
 }
 
 function responseToPlanPrefill(response) {
     const invitation = response.originalInvitation;
     if (response.type === "OPEN_SELECTION_RESPONSE") {
+        const answer = normalizeResponseAnswer(response.answer);
         return {
-            date: isIsoDate(response.dateChoice) ? response.dateChoice : "",
+            date: answer === "SUGGEST_OTHER_TIME"
+                ? response.suggestedDate || ""
+                : isIsoDate(response.dateChoice) ? response.dateChoice : "",
             emoji: response.activities[0]?.split(" ")[0] || "💌",
             category: "🎬 Freizeit",
             activity: response.activities.length ? response.activities.join(", ") : "Gemeinsame Aktivität",
-            note: response.otherActivityText
+            note: answer === "SUGGEST_OTHER_TIME" ? response.suggestionText : response.otherActivityText
         };
     }
     return {
-        date: response.answer === "OTHER_DATE" ? response.suggestedDate : invitation?.date || "",
+        date: normalizeResponseAnswer(response.answer) === "SUGGEST_OTHER_TIME" ? response.suggestedDate : invitation?.date || "",
         emoji: invitation?.emoji || "💌",
         category: invitation?.category || "✨ Sonstiges",
         activity: invitation?.activity || "Gemeinsame Aktivität",
@@ -202,8 +247,8 @@ function appendInvitationCard(parent, invitation, context, rerender, answerInvit
     text.textContent = invitation.type === "OPEN_SELECTION" ? "Gemeinsam auswählen" : invitation.activity;
     title.append(emoji, text);
     const badge = document.createElement("span");
-    badge.className = `badge${invitation.response ? " success" : ""}`;
-    badge.textContent = invitation.response ? "Antwort erhalten" : "Offen";
+    badge.className = `badge${invitation.response ? responseBadgeClass(invitation.response) : ""}`;
+    badge.textContent = invitation.response ? responseStatusLabel(invitation.response) : "Offen";
     heading.append(title, badge);
     card.append(heading);
 
@@ -228,22 +273,23 @@ function appendInvitationCard(parent, invitation, context, rerender, answerInvit
     }
     if (invitation.response) {
         const answer = document.createElement("div");
-        answer.className = "success-notice";
+        const status = normalizeResponseAnswer(invitation.response.answer);
+        answer.className = status === "ACCEPTED" ? "success-notice" : "warning-notice";
         answer.textContent = `${invitation.response.respondedBy}: ${responseSummary(invitation.response)}`;
         card.append(answer);
     }
 
     const actions = document.createElement("div");
     actions.className = "action-row";
-    if (!invitation.response && invitation.recipient === getCurrentIdentity()) {
+    if (invitation.recipient === getCurrentIdentity()) {
         const answer = document.createElement("button");
         answer.type = "button";
         answer.className = "primary-button";
-        answer.textContent = "Antworten";
+        answer.textContent = invitation.response ? "Antwort ändern" : "Antworten";
         answer.addEventListener("click", () => answerInvitation(invitation));
         actions.append(answer);
     }
-    if (invitation.response) {
+    if (invitation.response && canCreatePlanFromResponse(invitation.response)) {
         const plan = document.createElement("button");
         plan.type = "button";
         plan.className = "primary-button";
@@ -407,10 +453,79 @@ function renderOpenInvitationShare(container, invitation, context) {
     container.querySelector("#open-invite-message").textContent = invitation.message || `${invitation.createdBy} möchte Zeit mit dir verbringen.`;
     const wizard = container.querySelector("#invite-wizard");
 
-    function stepOne() {
+    function finishSimple(answer, suggestion = {}) {
+        const response = {
+            kind: "INVITATION_RESPONSE",
+            type: "OPEN_SELECTION_RESPONSE",
+            id: generateId(),
+            invitationId: invitation.id,
+            originalCreator: invitation.createdBy,
+            respondedBy: getCurrentIdentity(),
+            answer,
+            dateChoice: "Keine Auswahl",
+            timeChoice: "Keine Auswahl",
+            activities: [],
+            otherActivityText: "",
+            suggestedDate: suggestion.suggestedDate || "",
+            suggestedTime: suggestion.suggestedTime || "",
+            suggestionText: suggestion.suggestionText || "",
+            respondedAt: new Date().toISOString(),
+            originalInvitation: { ...invitation, response: null }
+        };
+        renderResponseActions(wizard, invitation, response, context);
+    }
+
+    function showSuggestionForm() {
         wizard.innerHTML = `
             <div class="step-indicator"><span class="active"></span><span></span><span></span></div>
-            <h2>1. Datum und Zeit</h2>
+            <h2>Anderen Zeitpunkt vorschlagen</h2>
+            <p class="muted">Ein Datum, eine Zeit oder eine kurze Nachricht genügt.</p>
+            <form id="open-suggestion-form" class="form-stack">
+                <div class="form-grid">
+                    <label class="field"><span>Anderes Datum</span><input name="suggestedDate" type="date" min="${localToday()}"></label>
+                    <label class="field"><span>Andere Zeit</span><select name="suggestedTime">${timeOptions(true)}</select></label>
+                    <label class="field span-two"><span>Nachricht</span><textarea name="suggestionText" maxlength="300" placeholder="Zum Beispiel: Sonntagabend wäre für mich besser."></textarea></label>
+                </div>
+                <p id="open-suggestion-error" class="error-message" aria-live="polite"></p>
+                <div class="action-row"><button class="primary-button" type="submit">Vorschlag übernehmen</button><button id="back-to-open-decision" class="text-button" type="button">← Zurück</button></div>
+            </form>`;
+        const form = wizard.querySelector("#open-suggestion-form");
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            const fields = new FormData(form);
+            const suggestedDate = isIsoDate(fields.get("suggestedDate")) ? fields.get("suggestedDate") : "";
+            const suggestedTime = safeText(fields.get("suggestedTime"), 80);
+            const suggestionText = safeText(fields.get("suggestionText"), 300);
+            if (!suggestedDate && !suggestedTime && !suggestionText) {
+                wizard.querySelector("#open-suggestion-error").textContent = "Bitte trage mindestens einen Vorschlag ein.";
+                return;
+            }
+            finishSimple("SUGGEST_OTHER_TIME", { suggestedDate, suggestedTime, suggestionText });
+        });
+        wizard.querySelector("#back-to-open-decision").addEventListener("click", showDecision);
+    }
+
+    function showDecision() {
+        wizard.innerHTML = `
+            <div class="step-indicator"><span class="active"></span><span></span><span></span></div>
+            <h2>Wie möchtest du antworten?</h2>
+            <div class="response-choice-grid">
+                <button id="open-accept" class="response-choice" type="button"><strong>✅ Zusagen</strong><span>Datum, Zeit und Aktivität auswählen</span></button>
+                <button id="open-pending" class="response-choice" type="button"><strong>⏳ Vielleicht</strong><span>Die Entscheidung bleibt noch offen</span></button>
+                <button id="open-reject" class="response-choice" type="button"><strong>❌ Absagen</strong><span>Diesmal passt es leider nicht</span></button>
+                <button id="open-suggest" class="response-choice" type="button"><strong>🔁 Andere Zeit</strong><span>Einen anderen Zeitpunkt vorschlagen</span></button>
+            </div>
+            <div class="action-row" style="margin-top:18px"><button class="text-button" type="button" data-route="invitations">Abbrechen</button></div>`;
+        wizard.querySelector("#open-accept").addEventListener("click", stepOne);
+        wizard.querySelector("#open-pending").addEventListener("click", () => finishSimple("PENDING"));
+        wizard.querySelector("#open-reject").addEventListener("click", () => finishSimple("REJECTED"));
+        wizard.querySelector("#open-suggest").addEventListener("click", showSuggestionForm);
+    }
+
+    function stepOne() {
+        wizard.innerHTML = `
+            <div class="step-indicator"><span class="active"></span><span class="active"></span><span></span></div>
+            <h2>Datum und Zeit</h2>
             <form id="invite-date-form" class="form-stack">
                 <fieldset><legend>Datum</legend><div class="choice-pills">
                     <label class="choice-pill"><input type="radio" name="dateMode" value="specific" checked><span>Konkretes Datum</span></label>
@@ -420,7 +535,7 @@ function renderOpenInvitationShare(container, invitation, context) {
                 <label id="invite-date-field" class="field"><span>Tag auswählen</span><input name="date" type="date" min="${localToday()}"></label>
                 <label class="field"><span>Zeit</span><select name="time">${timeOptions(false)}</select></label>
                 <p id="invite-date-error" class="error-message" aria-live="polite"></p>
-                <div class="action-row"><button class="primary-button" type="submit">Weiter</button></div>
+                <div class="action-row"><button class="primary-button" type="submit">Weiter</button><button id="back-to-open-decision" class="text-button" type="button">← Antwort ändern</button></div>
             </form>`;
         const form = wizard.querySelector("#invite-date-form");
         const dateField = wizard.querySelector("#invite-date-field");
@@ -440,17 +555,18 @@ function renderOpenInvitationShare(container, invitation, context) {
             state.timeChoice = TIMES.includes(fields.get("time")) ? fields.get("time") : "Keine Auswahl";
             stepTwo();
         });
+        wizard.querySelector("#back-to-open-decision").addEventListener("click", showDecision);
     }
 
     function stepTwo() {
         wizard.innerHTML = `
-            <div class="step-indicator"><span class="active"></span><span class="active"></span><span></span></div>
-            <h2>2. Aktivitäten</h2>
+            <div class="step-indicator"><span class="active"></span><span class="active"></span><span class="active"></span></div>
+            <h2>Aktivitäten</h2>
             <p class="muted">Mehrere Antworten sind möglich.</p>
             <div id="invite-activity-options" class="activity-options"></div>
             <label id="other-activity-field" class="field" hidden style="margin-top:14px"><span>Etwas anderes</span><input id="other-activity-text" type="text" maxlength="300"></label>
             <div class="action-row" style="margin-top:18px">
-                <button id="finish-activities" class="primary-button" type="button">Auswahl übernehmen</button>
+                <button id="finish-activities" class="primary-button" type="button">Zusage übernehmen</button>
                 <button id="skip-activities" class="secondary-button" type="button">Ohne Auswahl fortfahren</button>
                 <button id="back-to-date" class="text-button" type="button">← Zurück</button>
             </div>`;
@@ -460,6 +576,7 @@ function renderOpenInvitationShare(container, invitation, context) {
             button.type = "button";
             button.className = "activity-choice";
             button.textContent = activity;
+            button.classList.toggle("selected", state.activities.has(activity));
             button.addEventListener("click", () => {
                 if (state.activities.has(activity)) state.activities.delete(activity); else state.activities.add(activity);
                 button.classList.toggle("selected", state.activities.has(activity));
@@ -479,10 +596,14 @@ function renderOpenInvitationShare(container, invitation, context) {
                 invitationId: invitation.id,
                 originalCreator: invitation.createdBy,
                 respondedBy: getCurrentIdentity(),
+                answer: "ACCEPTED",
                 dateChoice: state.dateChoice,
                 timeChoice: state.timeChoice,
                 activities: Array.from(state.activities),
                 otherActivityText: state.otherActivityText,
+                suggestedDate: "",
+                suggestedTime: "",
+                suggestionText: "",
                 respondedAt: new Date().toISOString(),
                 originalInvitation: { ...invitation, response: null }
             };
@@ -492,7 +613,8 @@ function renderOpenInvitationShare(container, invitation, context) {
         wizard.querySelector("#skip-activities").addEventListener("click", () => finish(true));
         wizard.querySelector("#back-to-date").addEventListener("click", stepOne);
     }
-    stepOne();
+
+    showDecision();
 }
 
 function renderConcreteInvitationShare(container, invitation, context) {
@@ -502,13 +624,18 @@ function renderConcreteInvitationShare(container, invitation, context) {
             <div class="share-preview"><dl><dt>Kategorie</dt><dd id="concrete-category"></dd><dt>Datum</dt><dd id="concrete-date"></dd><dt>Zeit</dt><dd id="concrete-time"></dd><dt>Notiz</dt><dd id="concrete-note"></dd></dl></div>
             <form id="concrete-response-form" class="form-stack" style="margin-top:18px">
                 <fieldset><legend>Deine Antwort</legend><div class="choice-pills">
-                    <label class="choice-pill"><input type="radio" name="answer" value="HEART" required><span>❤️ Passt mir</span></label>
-                    <label class="choice-pill"><input type="radio" name="answer" value="NO_TIME"><span>🥀 Keine Zeit</span></label>
-                    <label class="choice-pill"><input type="radio" name="answer" value="OTHER_DATE"><span>🔁 Anderen Tag vorschlagen</span></label>
+                    <label class="choice-pill"><input type="radio" name="answer" value="ACCEPTED" required><span>✅ Zusagen</span></label>
+                    <label class="choice-pill"><input type="radio" name="answer" value="PENDING"><span>⏳ Vielleicht</span></label>
+                    <label class="choice-pill"><input type="radio" name="answer" value="REJECTED"><span>❌ Absagen</span></label>
+                    <label class="choice-pill"><input type="radio" name="answer" value="SUGGEST_OTHER_TIME"><span>🔁 Andere Zeit</span></label>
                 </div></fieldset>
-                <label id="concrete-suggested-field" class="field" hidden><span>Anderes Datum</span><input name="suggestedDate" type="date" min="${localToday()}"></label>
+                <div id="concrete-suggestion-fields" class="form-grid suggestion-fields" hidden>
+                    <label class="field"><span>Anderes Datum</span><input name="suggestedDate" type="date" min="${localToday()}"></label>
+                    <label class="field"><span>Andere Zeit</span><select name="suggestedTime">${timeOptions(true)}</select></label>
+                    <label class="field span-two"><span>Nachricht</span><textarea name="suggestionText" maxlength="300" placeholder="Zum Beispiel: Sonntagabend wäre für mich besser."></textarea></label>
+                </div>
                 <p id="concrete-response-error" class="error-message" aria-live="polite"></p>
-                <div class="action-row"><button class="primary-button" type="submit">Antwort erstellen</button><button class="text-button" type="button" data-route="home">Abbrechen</button></div>
+                <div class="action-row"><button class="primary-button" type="submit">Antwort übernehmen</button><button class="text-button" type="button" data-route="home">Abbrechen</button></div>
             </form>
             <div id="concrete-response-result" hidden></div>
         </section>`;
@@ -519,18 +646,21 @@ function renderConcreteInvitationShare(container, invitation, context) {
     container.querySelector("#concrete-time").textContent = invitation.time || "Keine Auswahl";
     container.querySelector("#concrete-note").textContent = invitation.note || "Keine Notiz";
     const form = container.querySelector("#concrete-response-form");
-    const suggestedField = container.querySelector("#concrete-suggested-field");
+    const suggestionFields = container.querySelector("#concrete-suggestion-fields");
     form.querySelectorAll('[name="answer"]').forEach((radio) => radio.addEventListener("change", () => {
-        suggestedField.hidden = radio.value !== "OTHER_DATE";
+        suggestionFields.hidden = radio.value !== "SUGGEST_OTHER_TIME";
+        container.querySelector("#concrete-response-error").textContent = "";
     }));
     form.addEventListener("submit", (event) => {
         event.preventDefault();
         if (!form.reportValidity()) return;
         const fields = new FormData(form);
-        const answer = fields.get("answer");
-        const suggestedDate = fields.get("suggestedDate");
-        if (answer === "OTHER_DATE" && !isIsoDate(suggestedDate)) {
-            container.querySelector("#concrete-response-error").textContent = "Bitte wähle ein vorgeschlagenes Datum.";
+        const answer = normalizeResponseAnswer(fields.get("answer"), "");
+        const suggestedDate = isIsoDate(fields.get("suggestedDate")) ? fields.get("suggestedDate") : "";
+        const suggestedTime = safeText(fields.get("suggestedTime"), 80);
+        const suggestionText = safeText(fields.get("suggestionText"), 300);
+        if (answer === "SUGGEST_OTHER_TIME" && !suggestedDate && !suggestedTime && !suggestionText) {
+            container.querySelector("#concrete-response-error").textContent = "Bitte trage mindestens einen anderen Zeitpunkt oder eine Nachricht ein.";
             return;
         }
         const response = {
@@ -541,7 +671,9 @@ function renderConcreteInvitationShare(container, invitation, context) {
             originalCreator: invitation.createdBy,
             respondedBy: getCurrentIdentity(),
             answer,
-            suggestedDate: answer === "OTHER_DATE" ? suggestedDate : "",
+            suggestedDate: answer === "SUGGEST_OTHER_TIME" ? suggestedDate : "",
+            suggestedTime: answer === "SUGGEST_OTHER_TIME" ? suggestedTime : "",
+            suggestionText: answer === "SUGGEST_OTHER_TIME" ? suggestionText : "",
             respondedAt: new Date().toISOString(),
             originalInvitation: { ...invitation, response: null }
         };
@@ -617,6 +749,7 @@ function renderInvitationResponseShare(container, rawResponse, context) {
         </section>`;
     container.querySelector("#response-by").textContent = response.respondedBy;
     container.querySelector("#response-content").textContent = responseSummary(response);
+    container.querySelector("#response-as-plan").hidden = !canCreatePlanFromResponse(response);
     function save(useShared) {
         saveImportedResponse(response, useShared);
         context.toast("Antwort wird mit euren gemeinsamen Einladungen synchronisiert.");

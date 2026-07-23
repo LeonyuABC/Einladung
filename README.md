@@ -1,4 +1,4 @@
-# Couple Space：每日心情 + 双主题 + 手机安装版
+# Couple Space：共同计划、愿望与每日心情
 
 这是 Yaoyu 和 Daria 共用的实时同步情侣空间。网页仍然是普通 HTML、CSS 和原生 JavaScript，不需要新的编译器、Node.js、Java 后端或自己租服务器。
 
@@ -16,7 +16,11 @@
 - 暂时不上传照片；
 - Yaoyu 登录后使用浅蓝色主题，Daria 使用粉色主题；
 - 双方每天可各选一个心情 Emoji，并选择多个简短文字状态；
+- 可以在对方的心情下面留下 Emoji 回应和简短留言；
 - 独立心情月历可查看双方每日 Emoji，点击日期可查看、补记或修改自己的记录；
+- 邀请支持接受、待定、拒绝和建议其他时间，待定后仍可修改回复；
+- 愿望支持双方分别回复、填写其他时间建议、直接编辑和记录预算；
+- 通知只保留最近 7 天，并且每个人最多保留最新 20 条；
 - 网站可安装到 Android 或 iPhone 主屏幕，像小 App 一样打开。
 
 第一次运行前，请严格按照 [FIREBASE-SETUP.md](FIREBASE-SETUP.md) 完成 Firebase 后台的三个设置。
@@ -29,7 +33,7 @@
 4. 用新版 `firestore.rules` 的全部内容替换编辑器内容，点击“发布”；
 5. 等 GitHub Pages 部署完成后，在电脑和手机上刷新网站。
 
-不需要新建 Firebase 项目，不需要修改数据库地区，也不需要重新设置匿名登录。旧的邀请、计划、日记和愿望会保留；新版只新增 `moods` 集合。
+不需要新建 Firebase 项目，不需要修改数据库地区，也不需要重新设置匿名登录。旧的邀请、计划、日记、愿望和心情会保留。旧版邀请与愿望回复会在读取时自动兼容为新的回复状态；此次修改不新增 Firestore 集合。
 
 ## 使用流程
 
@@ -58,10 +62,12 @@ Daria 不需要 Firebase 账号，也不需要创建 Firebase 项目。只有你
 - PWA 主屏幕安装支持（保持联网使用，不缓存旧程序文件）；
 - Firebase 匿名身份验证；
 - 跨手机、电脑和浏览器的 Firestore 实时同步；
-- 共同邀请，以及对邀请的站内回复；
+- 共同邀请，以及接受、待定、拒绝、建议其他时间等站内回复；
 - 月历、计划和双方反应；
 - 活动日记、双方评价与文字感想；
-- 愿望清单、Perfect Match、转计划与转邀请；
+- 愿望清单、预算、直接编辑、双方回复、Perfect Match、转计划与转邀请；
+- 对方心情的 Emoji 回应与简短留言；
+- 通知自动清理：最近 7 天、每人最多 20 条；
 - JSON 数据导出、导入与清空；
 - 本地界面缓存；
 - 手机和电脑响应式布局。
@@ -106,6 +112,7 @@ couples/yaoyu-daria/plans/{id}
 couples/yaoyu-daria/diaryEntries/{id}
 couples/yaoyu-daria/wishlistItems/{id}
 couples/yaoyu-daria/moods/{date-person}
+couples/yaoyu-daria/notifications/{id}
 ```
 
 浏览器中的 `coupleSpaceCloudCacheV1` 只是缓存。网页顶部显示 `Synchronisiert`，才表示已经成功连接 Firestore。

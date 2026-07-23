@@ -125,7 +125,7 @@ function mapById(items) {
 
 function buildPatch(before, after) {
     const patch = {};
-    const nestedMaps = new Set(["reactions", "contributions"]);
+    const nestedMaps = new Set(["reactions", "suggestions", "responses", "contributions"]);
     const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
     keys.delete("id");
     keys.delete("shareMode");
