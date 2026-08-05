@@ -1,4 +1,4 @@
-const VERSION = "couple-space-network-v1";
+const VERSION = "couple-space-2026-08-05-login-fix";
 
 self.addEventListener("install", (event) => {
     event.waitUntil(self.skipWaiting());

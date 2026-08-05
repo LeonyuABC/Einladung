@@ -1,16 +1,16 @@
 import {
-    clone,
     formatDate,
     generateId,
     getCurrentIdentity,
-    isIdentity,
     isIsoDate,
     loadData,
     localToday,
     safeText,
     updateData
 } from "./storage.js";
-import { buildShareUrl, isPlainObject } from "./share.js";
+import { sanitizeIdea, responseShort } from "./ideas.js";
+import { moodForDate, renderMoodEditor } from "./mood.js";
+import { LOVE_QUOTES, dailyQuoteStartIndex, quoteForIdentity } from "./quotes.js";
 
 export const PLAN_CATEGORIES = [
     "📚 Lernen",
@@ -22,478 +22,558 @@ export const PLAN_CATEGORIES = [
     "✨ Sonstiges"
 ];
 
-const TIME_OPTIONS = ["", "Vormittags", "Nachmittags", "Abends", "Ganzer Tag", "Egal"];
+const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+const RELATIONSHIP_START = "2026-07-19";
 let visibleMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 let selectedDate = localToday();
+let quoteTimer = null;
 
-function optionMarkup(options) {
-    return options.map((item) => `<option value="${item}">${item || "Keine Auswahl"}</option>`).join("");
+function escapeHtml(value = "") {
+    return String(value).replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+    })[character]);
 }
 
-function emptyReactions() {
-    return { Yaoyu: null, Daria: null };
+function dateFromIso(value) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day);
 }
 
-function sanitizeReaction(value) {
-    if (!isPlainObject(value) || !["HEART", "NO_TIME", "OTHER_DATE"].includes(value.type)) return null;
-    return {
-        type: value.type,
-        suggestedDate: value.type === "OTHER_DATE" && isIsoDate(value.suggestedDate) ? value.suggestedDate : ""
+function isoFromParts(year, monthIndex, day) {
+    return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function formatSelectedDate(value) {
+    return dateFromIso(value).toLocaleDateString("de-DE", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+    });
+}
+
+function relationshipDays(today = localToday()) {
+    const start = dateFromIso(RELATIONSHIP_START);
+    const current = dateFromIso(today);
+    const difference = Math.floor((current - start) / 86400000);
+    return Math.max(1, difference + 1);
+}
+
+function seededShuffle(items, seedText) {
+    let seed = 2166136261;
+    for (const character of seedText) {
+        seed ^= character.charCodeAt(0);
+        seed = Math.imul(seed, 16777619);
+    }
+    const result = [...items];
+    const random = () => {
+        seed += 0x6D2B79F5;
+        let value = seed;
+        value = Math.imul(value ^ (value >>> 15), value | 1);
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
     };
+    for (let index = result.length - 1; index > 0; index -= 1) {
+        const target = Math.floor(random() * (index + 1));
+        [result[index], result[target]] = [result[target], result[index]];
+    }
+    return result;
 }
 
-export function sanitizeSharedPlan(value) {
-    if (!isPlainObject(value) || value.kind !== "PLAN") throw new Error("INVALID_PLAN");
+function renderQuoteCard(container) {
+    window.clearInterval(quoteTimer);
+    const identity = getCurrentIdentity();
+    const today = localToday();
+    const shuffled = seededShuffle(LOVE_QUOTES, `${today}-${identity}`);
+    let index = dailyQuoteStartIndex(new Date()) % shuffled.length;
+    const card = container.querySelector("#love-quote-card");
+    const zh = card.querySelector("#quote-zh");
+    const uk = card.querySelector("#quote-uk");
+    const sourceZh = card.querySelector("#quote-source-zh");
+    const sourceUk = card.querySelector("#quote-source-uk");
+    const counter = card.querySelector("#quote-counter");
+
+    const show = (nextIndex, animate = true) => {
+        index = (nextIndex + shuffled.length) % shuffled.length;
+        const quote = quoteForIdentity(shuffled[index], identity);
+        if (animate) card.classList.remove("quote-changed");
+        zh.textContent = quote.zh;
+        uk.textContent = quote.uk;
+        sourceZh.textContent = quote.sourceZh;
+        sourceUk.textContent = quote.sourceUk;
+        counter.textContent = `${index + 1} / ${shuffled.length}`;
+        if (animate) requestAnimationFrame(() => card.classList.add("quote-changed"));
+    };
+    const restart = () => {
+        window.clearInterval(quoteTimer);
+        quoteTimer = window.setInterval(() => show(index + 1), 5000);
+    };
+    card.querySelector("#quote-previous").addEventListener("click", () => { show(index - 1); restart(); });
+    card.querySelector("#quote-next").addEventListener("click", () => { show(index + 1); restart(); });
+    show(index, false);
+    restart();
+}
+
+function sanitizeReactionMap(value) {
+    if (!value || typeof value !== "object") return { Yaoyu: null, Daria: null };
+    return { Yaoyu: value.Yaoyu ?? null, Daria: value.Daria ?? null };
+}
+
+export function sanitizePlan(value) {
+    if (!value || typeof value !== "object") return null;
     const id = safeText(value.id, 1000);
-    const activity = safeText(value.activity, 300);
-    if (!id || !activity || !isIsoDate(value.date) || !isIdentity(value.createdBy)) throw new Error("INVALID_PLAN");
+    const date = safeText(value.date, 10);
+    const title = safeText(value.title || value.activity, 300);
+    if (!id || !isIsoDate(date) || !title) return null;
     return {
         kind: "PLAN",
         id,
         createdAt: safeText(value.createdAt, 50) || new Date().toISOString(),
-        createdBy: value.createdBy,
-        date: value.date,
-        emoji: safeText(value.emoji, 12, "📅") || "📅",
+        updatedAt: safeText(value.updatedAt, 50) || safeText(value.createdAt, 50) || new Date().toISOString(),
+        createdBy: ["Yaoyu", "Daria"].includes(value.createdBy) ? value.createdBy : "Yaoyu",
+        emoji: safeText(value.emoji, 16, "📅") || "📅",
         category: safeText(value.category, 80, "✨ Sonstiges"),
-        activity,
-        time: safeText(value.time, 50),
-        note: safeText(value.note, 300),
-        reactions: {
-            Yaoyu: sanitizeReaction(value.reactions?.Yaoyu),
-            Daria: sanitizeReaction(value.reactions?.Daria)
-        },
-        shareMode: value.shareMode === "response" ? "response" : "item"
+        title,
+        activity: title,
+        description: safeText(value.description || value.note, 1000),
+        note: safeText(value.description || value.note, 1000),
+        date,
+        startTime: /^\d{2}:\d{2}$/.test(value.startTime || "") ? value.startTime : "",
+        endTime: /^\d{2}:\d{2}$/.test(value.endTime || "") ? value.endTime : "",
+        legacyTime: safeText(value.legacyTime || value.time, 60),
+        time: safeText(value.legacyTime || value.time, 60),
+        reactions: sanitizeReactionMap(value.reactions)
     };
 }
 
-function createPlan(form) {
+function plansFromData(data = loadData()) {
+    return (data.plans || []).map(sanitizePlan).filter(Boolean);
+}
+
+function ideasFromData(data = loadData()) {
+    return (data.wishlistItems || []).map(sanitizeIdea).filter((idea) => idea && idea.date);
+}
+
+function planTimeLabel(plan) {
+    if (plan.startTime && plan.endTime) return `${plan.startTime}–${plan.endTime}`;
+    if (plan.startTime) return plan.startTime;
+    return plan.legacyTime;
+}
+
+function planFromForm(form, existing = null) {
     const fields = new FormData(form);
-    return {
-        kind: "PLAN",
-        id: generateId(),
-        createdAt: new Date().toISOString(),
-        createdBy: getCurrentIdentity(),
+    return sanitizePlan({
+        ...(existing || {}),
+        id: existing?.id || generateId(),
+        createdAt: existing?.createdAt || new Date().toISOString(),
+        createdBy: existing?.createdBy || getCurrentIdentity(),
+        updatedAt: new Date().toISOString(),
+        emoji: fields.get("emoji"),
+        category: fields.get("category"),
+        title: fields.get("title"),
+        description: fields.get("description"),
         date: fields.get("date"),
-        emoji: safeText(fields.get("emoji"), 12, "📅") || "📅",
-        category: safeText(fields.get("category"), 80),
-        activity: safeText(fields.get("activity"), 300),
-        time: safeText(fields.get("time"), 50),
-        note: safeText(fields.get("note"), 300),
-        reactions: emptyReactions(),
-        shareMode: "item"
+        startTime: fields.get("startTime"),
+        endTime: fields.get("endTime"),
+        reactions: existing?.reactions || { Yaoyu: null, Daria: null }
+    });
+}
+
+function planFormMarkup(plan = null, date = selectedDate) {
+    const current = plan || {
+        emoji: "📅", category: PLAN_CATEGORIES[0], title: "", description: "", date, startTime: "", endTime: ""
     };
+    return `
+        <form id="calendar-plan-form" class="form-stack">
+            <div class="form-grid">
+                <label class="field"><span>Datum *</span><input name="date" type="date" value="${escapeHtml(current.date)}" required></label>
+                <label class="field"><span>Emoji *</span><input name="emoji" maxlength="16" value="${escapeHtml(current.emoji)}" required></label>
+                <label class="field"><span>Kategorie</span><select name="category">${PLAN_CATEGORIES.map((item) => `<option value="${item}" ${item === current.category ? "selected" : ""}>${item}</option>`).join("")}</select></label>
+                <label class="field"><span>Titel *</span><input name="title" maxlength="300" value="${escapeHtml(current.title)}" required></label>
+                <label class="field"><span>Beginn</span><input name="startTime" type="time" value="${escapeHtml(current.startTime)}"></label>
+                <label class="field"><span>Ende</span><input name="endTime" type="time" value="${escapeHtml(current.endTime)}"></label>
+                <label class="field span-two"><span>Notiz</span><textarea name="description" maxlength="1000" rows="3">${escapeHtml(current.description)}</textarea></label>
+            </div>
+            <p id="calendar-plan-error" class="error-message" aria-live="polite"></p>
+            <div class="action-row"><button class="primary-button" type="submit">${plan ? "Plan aktualisieren" : "Plan speichern"}</button></div>
+        </form>`;
 }
 
-function coreSignature(plan) {
-    return JSON.stringify([plan.date, plan.emoji, plan.category, plan.activity, plan.time, plan.note, plan.createdBy]);
-}
-
-function findPlanConflicts(local, incoming) {
-    if (!local) return [];
-    const conflicts = [];
-    if (coreSignature(local) !== coreSignature(incoming)) conflicts.push("Inhalt");
-    for (const identity of ["Yaoyu", "Daria"]) {
-        const left = local.reactions?.[identity] || null;
-        const right = incoming.reactions?.[identity] || null;
-        if (left && right && JSON.stringify(left) !== JSON.stringify(right)) conflicts.push(`Reaktion von ${identity}`);
-    }
-    return conflicts;
-}
-
-function mergePlan(incoming, useShared) {
-    updateData((data) => {
-        const index = data.plans.findIndex((item) => item.id === incoming.id);
-        if (index < 0) {
-            data.plans.push(clone(incoming));
+function renderPlanForm(host, plan, context, rerender) {
+    host.innerHTML = planFormMarkup(plan, plan?.date || selectedDate);
+    const form = host.querySelector("#calendar-plan-form");
+    form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+        const next = planFromForm(form, plan);
+        if (!next) {
+            host.querySelector("#calendar-plan-error").textContent = "Bitte prüfe Datum, Titel und Emoji.";
+            return;
+        }
+        updateData((data) => {
+            const index = data.plans.findIndex((item) => item.id === next.id);
+            if (index >= 0) data.plans[index] = next;
+            else data.plans.push(next);
             return data;
-        }
-        const local = sanitizeSharedPlan({ kind: "PLAN", ...data.plans[index] });
-        if (useShared) {
-            data.plans[index] = clone(incoming);
-            return data;
-        }
-        for (const identity of ["Yaoyu", "Daria"]) {
-            if (!local.reactions[identity] && incoming.reactions[identity]) {
-                local.reactions[identity] = clone(incoming.reactions[identity]);
-            }
-        }
-        data.plans[index] = local;
-        return data;
+        });
+        selectedDate = next.date;
+        visibleMonth = new Date(dateFromIso(next.date).getFullYear(), dateFromIso(next.date).getMonth(), 1);
+        context.toast(plan ? "Plan wurde aktualisiert." : "Plan wurde gespeichert.");
+        rerender();
     });
 }
 
-function setPlanReaction(planId, type, suggestedDate = "") {
-    const identity = getCurrentIdentity();
-    updateData((data) => {
-        const plan = data.plans.find((item) => item.id === planId);
-        if (!plan) return data;
-        plan.reactions ||= emptyReactions();
-        plan.reactions[identity] = { type, suggestedDate: type === "OTHER_DATE" ? suggestedDate : "" };
-        return data;
-    });
-}
-
-function reactionText(reaction) {
-    if (!reaction) return "Noch keine Reaktion";
-    if (reaction.type === "HEART") return "❤️ Passt mir";
-    if (reaction.type === "NO_TIME") return "🥀 Keine Zeit";
-    return `🔁 ${formatDate(reaction.suggestedDate)}`;
-}
-
-function appendPlanCard(parent, rawPlan, context, rerender, compact = false) {
-    let plan;
-    try {
-        plan = sanitizeSharedPlan({ kind: "PLAN", ...rawPlan });
-    } catch (error) {
-        return;
-    }
-    const card = document.createElement("article");
-    card.className = "list-card";
-
+function appendPlanItem(parent, plan, context, rerender, editPlan) {
+    const item = document.createElement("article");
+    item.className = "calendar-event calendar-event-plan";
     const heading = document.createElement("div");
-    heading.className = "card-heading";
-    const title = document.createElement("h3");
-    title.className = "emoji-title";
-    const emoji = document.createElement("span");
-    emoji.className = "emoji";
-    emoji.textContent = plan.emoji;
-    const titleText = document.createElement("span");
-    titleText.textContent = plan.activity;
-    title.append(emoji, titleText);
+    heading.className = "calendar-event-heading";
+    const title = document.createElement("h4");
+    title.textContent = `${plan.emoji} ${plan.title}`;
     const badge = document.createElement("span");
-    const confirmed = plan.reactions.Yaoyu?.type === "HEART" && plan.reactions.Daria?.type === "HEART";
-    badge.className = `badge${confirmed ? " success" : ""}`;
-    badge.textContent = confirmed ? "Von euch beiden bestätigt" : plan.category;
+    badge.className = "badge plan-color-badge";
+    badge.textContent = "Plan";
     heading.append(title, badge);
-    card.append(heading);
+    item.append(heading);
+    const time = planTimeLabel(plan);
+    if (time || plan.category) {
+        const meta = document.createElement("p");
+        meta.className = "meta";
+        meta.textContent = [time, plan.category].filter(Boolean).join(" · ");
+        item.append(meta);
+    }
+    if (plan.description) {
+        const note = document.createElement("p");
+        note.textContent = plan.description;
+        item.append(note);
+    }
+    const actions = document.createElement("div");
+    actions.className = "action-row";
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "secondary-button";
+    edit.textContent = "Bearbeiten";
+    edit.addEventListener("click", () => editPlan(plan));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger-button";
+    remove.textContent = "Löschen";
+    remove.addEventListener("click", () => {
+        if (!window.confirm("Möchtest du diesen Plan wirklich für Yaoyu und Daria löschen?")) return;
+        updateData((data) => {
+            data.plans = data.plans.filter((item) => item.id !== plan.id);
+            return data;
+        });
+        context.toast("Plan wurde gelöscht.");
+        rerender();
+    });
+    actions.append(edit, remove);
+    item.append(actions);
+    parent.append(item);
+}
 
+function appendIdeaItem(parent, idea, context, rerender) {
+    const item = document.createElement("article");
+    item.className = "calendar-event calendar-event-idea";
+    const heading = document.createElement("div");
+    heading.className = "calendar-event-heading";
+    const title = document.createElement("h4");
+    title.textContent = `${idea.emoji} ${idea.title}`;
+    const badge = document.createElement("span");
+    badge.className = "badge idea-color-badge";
+    const state = responseShort(idea.responses);
+    badge.textContent = `Unsere Idee${state ? ` · ${state}` : ""}`;
+    heading.append(title, badge);
+    item.append(heading);
+    const metaParts = [];
+    if (idea.startTime && idea.endTime) metaParts.push(`${idea.startTime}–${idea.endTime}`);
+    else if (idea.startTime) metaParts.push(idea.startTime);
+    metaParts.push(idea.type);
     const meta = document.createElement("p");
     meta.className = "meta";
-    meta.textContent = `${formatDate(plan.date, { weekday: "long" })}${plan.time ? ` · ${plan.time}` : ""} · von ${plan.createdBy}`;
-    card.append(meta);
-
-    if (plan.note && !compact) {
-        const note = document.createElement("p");
-        note.textContent = plan.note;
-        card.append(note);
+    meta.textContent = metaParts.join(" · ");
+    item.append(meta);
+    if (idea.description) {
+        const description = document.createElement("p");
+        description.textContent = idea.description;
+        item.append(description);
     }
-
-    if (!compact) {
-        const reactionSummary = document.createElement("p");
-        reactionSummary.className = "meta";
-        reactionSummary.textContent = `Yaoyu: ${reactionText(plan.reactions.Yaoyu)} · Daria: ${reactionText(plan.reactions.Daria)}`;
-        card.append(reactionSummary);
-
-        const reactions = document.createElement("div");
-        reactions.className = "reaction-row";
-        const currentReaction = plan.reactions[getCurrentIdentity()];
-        [
-            ["HEART", "❤️ Passt mir"],
-            ["NO_TIME", "🥀 Keine Zeit"],
-            ["OTHER_DATE", "🔁 Anderer Tag"]
-        ].forEach(([type, label]) => {
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = `reaction-button${currentReaction?.type === type ? " selected" : ""}`;
-            button.textContent = label;
-            button.addEventListener("click", () => {
-                if (type === "OTHER_DATE") {
-                    alternative.hidden = false;
-                    alternative.focus();
-                    return;
-                }
-                setPlanReaction(plan.id, type);
-                context.toast("Reaktion wird synchronisiert.");
-                rerender();
-            });
-            reactions.append(button);
-        });
-        const alternative = document.createElement("input");
-        alternative.type = "date";
-        alternative.className = "secondary-button";
-        alternative.min = localToday();
-        alternative.hidden = currentReaction?.type !== "OTHER_DATE";
-        alternative.value = currentReaction?.suggestedDate || "";
-        alternative.setAttribute("aria-label", "Anderes Datum vorschlagen");
-        alternative.addEventListener("change", () => {
-            if (!isIsoDate(alternative.value)) return;
-            setPlanReaction(plan.id, "OTHER_DATE", alternative.value);
-            context.toast("Datumsvorschlag wurde gespeichert.");
-            rerender();
-        });
-        reactions.append(alternative);
-        card.append(reactions);
-
-        const actions = document.createElement("div");
-        actions.className = "action-row";
-        const share = document.createElement("button");
-        share.type = "button";
-        share.className = "secondary-button";
-        share.textContent = "Plan teilen";
-        share.addEventListener("click", () => context.showShare("plan", { ...plan, shareMode: "item" }, "Plan teilen", `${plan.emoji} ${plan.activity}`));
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "danger-button";
-        remove.textContent = "Lokal löschen";
-        remove.addEventListener("click", () => {
-            if (!window.confirm("Diesen Plan für Yaoyu und Daria auf allen Geräten löschen?")) return;
-            updateData((data) => {
-                data.plans = data.plans.filter((item) => item.id !== plan.id);
-                return data;
-            });
-            context.toast("Plan wird auf allen Geräten gelöscht.");
-            rerender();
-        });
-        actions.append(share, remove);
-        card.append(actions);
+    if (idea.budget) {
+        const budget = document.createElement("p");
+        budget.className = "idea-budget";
+        budget.textContent = `💶 ${idea.budget}`;
+        item.append(budget);
     }
-    parent.append(card);
+    const actions = document.createElement("div");
+    actions.className = "action-row";
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "secondary-button";
+    open.textContent = "Antworten & kommentieren";
+    open.addEventListener("click", () => context.navigate("ideas"));
+    const removeDate = document.createElement("button");
+    removeDate.type = "button";
+    removeDate.className = "text-button";
+    removeDate.textContent = "Datum entfernen";
+    removeDate.addEventListener("click", () => {
+        updateData((data) => {
+            const index = data.wishlistItems.findIndex((entry) => entry.id === idea.id);
+            const current = sanitizeIdea(data.wishlistItems[index]);
+            if (!current) return data;
+            current.date = "";
+            current.startTime = "";
+            current.endTime = "";
+            current.updatedAt = new Date().toISOString();
+            data.wishlistItems[index] = current;
+            return data;
+        });
+        context.toast("Die Idee bleibt erhalten und wurde aus dem Kalender entfernt.");
+        rerender();
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "danger-button";
+    remove.textContent = "Idee löschen";
+    remove.addEventListener("click", () => {
+        if (!window.confirm("Möchtest du diese Idee wirklich vollständig löschen?")) return;
+        updateData((data) => {
+            data.wishlistItems = data.wishlistItems.filter((entry) => entry.id !== idea.id);
+            return data;
+        });
+        context.toast("Idee wurde gelöscht.");
+        rerender();
+    });
+    actions.append(open, removeDate, remove);
+    item.append(actions);
+    parent.append(item);
 }
 
-function renderCalendarGrid(container, plans, context, rerender) {
-    const monthTitle = container.querySelector("#calendar-month-title");
-    monthTitle.textContent = visibleMonth.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
-    const grid = container.querySelector("#calendar-grid");
+function calendarMoodRow(identity, mood) {
+    const row = document.createElement("span");
+    row.className = `combined-calendar-mood combined-calendar-${identity.toLowerCase()}`;
+    row.textContent = mood?.emoji || "·";
+    row.setAttribute("aria-label", mood ? `${identity}: ${mood.emoji}` : `${identity}: kein Eintrag`);
+    return row;
+}
+
+function eventSummaryForDate(date, plans, ideas) {
+    const events = [
+        ...plans.filter((plan) => plan.date === date).map((plan) => ({ kind: "plan", emoji: plan.emoji, title: plan.title, time: planTimeLabel(plan) })),
+        ...ideas.filter((idea) => idea.date === date).map((idea) => ({ kind: "idea", emoji: idea.emoji, title: idea.title, time: idea.startTime }))
+    ].sort((left, right) => String(left.time || "99:99").localeCompare(String(right.time || "99:99")));
+    return events;
+}
+
+function renderCalendarGrid(container, data, context, rerender) {
+    const plans = plansFromData(data);
+    const ideas = ideasFromData(data);
+    const title = container.querySelector("#combined-calendar-title");
+    const grid = container.querySelector("#combined-calendar-grid");
+    title.textContent = visibleMonth.toLocaleDateString("de-DE", { month: "long", year: "numeric" });
     grid.replaceChildren();
-    ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].forEach((day) => {
+    WEEKDAYS.forEach((weekday) => {
         const label = document.createElement("div");
-        label.className = "calendar-weekday";
-        label.textContent = day;
+        label.className = "combined-calendar-weekday";
+        label.textContent = weekday;
         grid.append(label);
     });
-
     const year = visibleMonth.getFullYear();
     const month = visibleMonth.getMonth();
-    const leadingDays = (new Date(year, month, 1).getDay() + 6) % 7;
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    for (let index = 0; index < leadingDays; index += 1) {
+    const leading = (new Date(year, month, 1).getDay() + 6) % 7;
+    const days = new Date(year, month + 1, 0).getDate();
+    for (let index = 0; index < leading; index += 1) {
         const blank = document.createElement("span");
-        blank.className = "calendar-day empty";
+        blank.className = "combined-calendar-day empty";
         grid.append(blank);
     }
-
-    for (let day = 1; day <= daysInMonth; day += 1) {
-        const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        const dayPlans = plans.filter((plan) => plan.date === iso);
+    for (let day = 1; day <= days; day += 1) {
+        const date = isoFromParts(year, month, day);
+        const yaoyuMood = moodForDate("Yaoyu", date, data);
+        const dariaMood = moodForDate("Daria", date, data);
+        const events = eventSummaryForDate(date, plans, ideas);
         const button = document.createElement("button");
         button.type = "button";
-        button.className = `calendar-day${iso === localToday() ? " today" : ""}${iso === selectedDate ? " selected" : ""}`;
-        button.setAttribute("aria-label", `${formatDate(iso)}, ${dayPlans.length} Pläne`);
+        button.className = "combined-calendar-day";
+        button.classList.toggle("today", date === localToday());
+        button.classList.toggle("selected", date === selectedDate);
         const number = document.createElement("span");
+        number.className = "combined-calendar-number";
         number.textContent = String(day);
-        const emojis = document.createElement("span");
-        emojis.className = "day-emojis";
-        emojis.textContent = dayPlans.slice(0, 2).map((plan) => safeText(plan.emoji, 12, "📅")).join(" ");
-        const count = document.createElement("span");
-        count.className = "day-count";
-        count.textContent = dayPlans.length ? `${dayPlans.length} Plan${dayPlans.length === 1 ? "" : "e"}` : "";
-        button.append(number, emojis, count);
+        const rows = document.createElement("span");
+        rows.className = "combined-calendar-rows";
+        rows.append(calendarMoodRow("Yaoyu", yaoyuMood), calendarMoodRow("Daria", dariaMood));
+        const eventRow = document.createElement("span");
+        eventRow.className = "combined-calendar-event-row";
+        if (!events.length) {
+            eventRow.textContent = "·";
+        } else {
+            const first = events[0];
+            eventRow.classList.add(first.kind === "plan" ? "event-plan" : "event-idea");
+            const summary = document.createElement("span");
+            summary.textContent = `${first.emoji} ${first.time ? `${first.time} ` : ""}${first.title}`;
+            eventRow.append(summary);
+            if (events.length > 1) {
+                const more = document.createElement("b");
+                more.textContent = `+${events.length - 1}`;
+                eventRow.append(more);
+            }
+        }
+        rows.append(eventRow);
+        button.append(number, rows);
+        button.setAttribute("aria-label", `${formatSelectedDate(date)}; ${events.length} Einträge`);
         button.addEventListener("click", () => {
-            selectedDate = iso;
+            selectedDate = date;
             rerender();
         });
         grid.append(button);
     }
-
-    const dayPanel = container.querySelector("#selected-day-plans");
-    dayPanel.replaceChildren();
-    const selectedPlans = plans.filter((plan) => plan.date === selectedDate);
-    const heading = document.createElement("h2");
-    heading.textContent = formatDate(selectedDate, { weekday: "long" });
-    dayPanel.append(heading);
-    if (!selectedPlans.length) {
-        const empty = document.createElement("p");
-        empty.className = "empty-state";
-        empty.textContent = "Für diesen Tag gibt es noch keinen Plan.";
-        dayPanel.append(empty);
-    } else {
-        selectedPlans.forEach((plan) => appendPlanCard(dayPanel, plan, context, rerender, true));
-    }
 }
 
-export function renderCalendar(container, context) {
-    const prefill = context.consumePrefill?.("calendar") || {};
-    const rerender = () => renderCalendar(container, context);
+function renderDayDetails(container, data, context, rerender) {
+    const plans = plansFromData(data).filter((plan) => plan.date === selectedDate)
+        .sort((left, right) => String(planTimeLabel(left)).localeCompare(String(planTimeLabel(right))));
+    const ideas = ideasFromData(data).filter((idea) => idea.date === selectedDate)
+        .sort((left, right) => String(left.startTime).localeCompare(String(right.startTime)));
+    const host = container.querySelector("#selected-day-details");
+    host.innerHTML = `
+        <div class="section-heading">
+            <div><p class="eyebrow">AUSGEWÄHLTER TAG</p><h2>${escapeHtml(formatSelectedDate(selectedDate))}</h2></div>
+            <button id="add-plan-for-day" class="primary-button" type="button">+ Plan</button>
+        </div>
+        <div id="plan-form-host" class="module-card inline-plan-form" hidden></div>
+        <div class="selected-day-columns">
+            <section><h3>Pläne <span class="badge">${plans.length}</span></h3><div id="selected-plans" class="calendar-event-list"></div></section>
+            <section><h3>Unsere Ideen <span class="badge">${ideas.length}</span></h3><div id="selected-ideas" class="calendar-event-list"></div></section>
+        </div>`;
+    const formHost = host.querySelector("#plan-form-host");
+    const openPlanForm = (plan = null) => {
+        formHost.hidden = false;
+        renderPlanForm(formHost, plan, context, rerender);
+        formHost.querySelector('input[name="title"]')?.focus();
+    };
+    host.querySelector("#add-plan-for-day").addEventListener("click", () => openPlanForm());
+    const planList = host.querySelector("#selected-plans");
+    const ideaList = host.querySelector("#selected-ideas");
+    if (!plans.length) planList.innerHTML = '<p class="empty-state">Noch kein normaler Plan für diesen Tag.</p>';
+    else plans.forEach((plan) => appendPlanItem(planList, plan, context, rerender, openPlanForm));
+    if (!ideas.length) ideaList.innerHTML = '<p class="empty-state">Keine datierte Idee für diesen Tag.</p>';
+    else ideas.forEach((idea) => appendIdeaItem(ideaList, idea, context, rerender));
+}
+
+export function renderStart(container, context) {
+    const prefill = context.consumePrefill?.("home") || null;
+    if (prefill && isIsoDate(prefill.date)) {
+        selectedDate = prefill.date;
+        const chosen = dateFromIso(selectedDate);
+        visibleMonth = new Date(chosen.getFullYear(), chosen.getMonth(), 1);
+    }
+    const rerender = () => renderStart(container, context);
     const data = loadData();
-    const plans = data.plans.flatMap((item) => {
-        try { return [sanitizeSharedPlan({ kind: "PLAN", ...item })]; } catch (error) { return []; }
-    });
-
+    const days = relationshipDays();
     container.innerHTML = `
-        <header class="page-header page-header-row">
-            <div><p class="eyebrow">PLANUNGSZENTRUM</p><h1>Unsere Pläne</h1><p class="muted">Kalender, Ideen und Reaktionen – automatisch zwischen euren Geräten synchronisiert.</p></div>
-            <button id="toggle-plan-form" class="primary-button" type="button">+ Plan hinzufügen</button>
-        </header>
-        <section id="plan-form-card" class="module-card" ${Object.keys(prefill).length ? "" : "hidden"}>
-            <div class="section-heading"><h2>Neuer Plan</h2><button id="close-plan-form" class="icon-button" type="button" aria-label="Formular schließen">×</button></div>
-            <form id="plan-form" class="form-stack">
-                <div class="form-grid">
-                    <label class="field"><span>Datum *</span><input name="date" type="date" required></label>
-                    <label class="field"><span>Emoji *</span><input name="emoji" type="text" maxlength="12" value="📅" required></label>
-                    <label class="field"><span>Kategorie *</span><select name="category" required>${optionMarkup(PLAN_CATEGORIES)}</select></label>
-                    <label class="field"><span>Zeit</span><select name="time">${optionMarkup(TIME_OPTIONS)}</select></label>
-                    <label class="field span-two"><span>Was möchtet ihr machen? *</span><input name="activity" type="text" maxlength="300" required></label>
-                    <label class="field span-two"><span>Notiz</span><textarea name="note" maxlength="300"></textarea></label>
+        <section class="home-hero new-home-hero">
+            <article id="love-quote-card" class="card love-quote-card">
+                <div class="quote-toolbar">
+                    <div><p class="eyebrow">中乌双语 · 中文 / УКРАЇНСЬКА</p><span id="quote-counter" class="quote-counter"></span></div>
+                    <div class="quote-arrows" aria-label="情话切换">
+                        <button id="quote-previous" type="button" aria-label="上一句">▲</button>
+                        <button id="quote-next" type="button" aria-label="下一句">▼</button>
+                    </div>
                 </div>
-                <p id="plan-error" class="error-message" aria-live="polite"></p>
-                <div class="action-row"><button class="primary-button" type="submit">Plan gemeinsam speichern</button></div>
-            </form>
-        </section>
-        <section class="calendar-layout" style="margin-top:20px">
-            <article class="calendar-card">
-                <div class="calendar-controls">
-                    <button id="previous-month" class="icon-button" type="button" aria-label="Vorheriger Monat">←</button>
-                    <h2 id="calendar-month-title"></h2>
-                    <button id="next-month" class="icon-button" type="button" aria-label="Nächster Monat">→</button>
-                </div>
-                <div id="calendar-grid" class="calendar-grid"></div>
+                <blockquote id="quote-zh" class="quote-zh"></blockquote>
+                <blockquote id="quote-uk" class="quote-uk" lang="uk"></blockquote>
+                <div class="quote-source"><span id="quote-source-zh"></span><span id="quote-source-uk" lang="uk"></span></div>
             </article>
-            <aside id="selected-day-plans" class="module-card day-panel"></aside>
+            <aside class="card relationship-card">
+                <p class="eyebrow">YAOYU ♡ DARIA</p>
+                <div class="relationship-number">${days}</div>
+                <div class="relationship-bilingual"><p>我们在一起的第 ${days} 天</p><p lang="uk">Ми разом уже ${days} днів</p></div>
+            </aside>
         </section>
-        <section style="margin-top:28px">
-            <div class="section-heading"><h2>Alle Pläne</h2><span class="badge">${plans.length}</span></div>
-            <div id="all-plans" class="list-stack"></div>
+
+        <section id="home-mood-editor" class="module-card home-mood-editor"></section>
+
+        <section class="combined-calendar-section">
+            <div class="section-heading">
+                <div><p class="eyebrow">GEMEINSAMER KALENDER</p><h2>Stimmungen, Pläne und Ideen</h2></div>
+                <button id="calendar-today" class="secondary-button" type="button">Heute</button>
+            </div>
+            <div class="calendar-legend">
+                <span class="legend-yaoyu">Yaoyu</span>
+                <span class="legend-daria">Daria</span>
+                <span class="legend-plan">Normaler Plan</span>
+                <span class="legend-idea">Unsere Idee</span>
+            </div>
+            <article class="combined-calendar-card">
+                <div class="calendar-controls">
+                    <button id="combined-previous-month" class="icon-button" type="button" aria-label="Vorheriger Monat">←</button>
+                    <h2 id="combined-calendar-title"></h2>
+                    <button id="combined-next-month" class="icon-button" type="button" aria-label="Nächster Monat">→</button>
+                </div>
+                <div id="combined-calendar-grid" class="combined-calendar-grid"></div>
+            </article>
         </section>
-        <div class="action-row" style="margin-top:20px"><button class="secondary-button" type="button" data-route="home">← Zur Startseite</button></div>`;
 
-    const formCard = container.querySelector("#plan-form-card");
-    const form = container.querySelector("#plan-form");
-    const dateInput = form.elements.date;
-    dateInput.value = isIsoDate(prefill.date) ? prefill.date : selectedDate;
-    dateInput.min = "2000-01-01";
-    form.elements.emoji.value = safeText(prefill.emoji, 12, "📅") || "📅";
-    if (PLAN_CATEGORIES.includes(prefill.category)) form.elements.category.value = prefill.category;
-    form.elements.activity.value = safeText(prefill.activity, 300);
-    form.elements.note.value = safeText(prefill.note, 300);
+        <section id="selected-day-details" class="module-card selected-day-details"></section>`;
 
-    container.querySelector("#toggle-plan-form").addEventListener("click", () => {
-        formCard.hidden = false;
-        dateInput.focus();
-    });
-    container.querySelector("#close-plan-form").addEventListener("click", () => { formCard.hidden = true; });
-    form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const error = container.querySelector("#plan-error");
-        if (!form.reportValidity()) return;
-        const plan = createPlan(form);
-        if (!isIsoDate(plan.date) || !plan.activity) {
-            error.textContent = "Bitte prüfe Datum und Aktivität.";
-            return;
-        }
-        updateData((current) => {
-            current.plans.push(plan);
-            return current;
-        });
-        selectedDate = plan.date;
-        context.toast("Plan wird mit Firebase synchronisiert.");
-        rerender();
-    });
+    renderQuoteCard(container);
+    renderMoodEditor(container.querySelector("#home-mood-editor"), selectedDate, context, rerender);
+    renderCalendarGrid(container, data, context, rerender);
+    renderDayDetails(container, data, context, rerender);
 
-    container.querySelector("#previous-month").addEventListener("click", () => {
+    container.querySelector("#combined-previous-month").addEventListener("click", () => {
         visibleMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1);
         rerender();
     });
-    container.querySelector("#next-month").addEventListener("click", () => {
+    container.querySelector("#combined-next-month").addEventListener("click", () => {
         visibleMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1);
         rerender();
     });
+    container.querySelector("#calendar-today").addEventListener("click", () => {
+        selectedDate = localToday();
+        const today = dateFromIso(selectedDate);
+        visibleMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        rerender();
+    });
+}
 
-    renderCalendarGrid(container, plans, context, rerender);
-    const list = container.querySelector("#all-plans");
-    if (!plans.length) {
-        list.innerHTML = '<div class="module-card empty-state">Noch keine Pläne. Fügt euren ersten gemeinsamen Termin hinzu.</div>';
-    } else {
-        plans.sort((a, b) => a.date.localeCompare(b.date)).forEach((plan) => appendPlanCard(list, plan, context, rerender));
-    }
+// Alte Routen und geteilte Plan-Links bleiben lesbar.
+export function renderCalendar(container, context) {
+    renderStart(container, context);
+}
+
+export function sanitizeSharedPlan(value) {
+    const plan = sanitizePlan(value);
+    if (!plan) throw new Error("INVALID_PLAN");
+    return plan;
 }
 
 export function renderPlanShare(container, rawPayload, context) {
-    let plan;
-    try {
-        plan = sanitizeSharedPlan(rawPayload);
-    } catch (error) {
+    const plan = sanitizePlan(rawPayload);
+    if (!plan) {
         context.renderShareError();
         return;
     }
-    const identity = getCurrentIdentity();
-    const local = loadData().plans.find((item) => item.id === plan.id);
-    const conflicts = findPlanConflicts(local ? sanitizeSharedPlan({ kind: "PLAN", ...local }) : null, plan);
-
     container.innerHTML = `
-        <header class="page-header"><p class="eyebrow">GETEILTER PLAN</p><h1>Ein Plan für euch</h1><p class="muted">Prüfe den Inhalt, bevor du ihn in euren gemeinsamen Space übernimmst.</p></header>
+        <header class="page-header"><p class="eyebrow">GETEILTER PLAN</p><h1>${escapeHtml(plan.emoji)} ${escapeHtml(plan.title)}</h1></header>
         <section class="module-card">
-            <div class="share-preview"><dl><dt>Geteilt von</dt><dd id="shared-by"></dd><dt>Typ</dt><dd>Plan</dd><dt>Inhalt</dt><dd id="shared-content"></dd><dt>Datum</dt><dd id="shared-date"></dd></dl></div>
-            <p id="shared-note"></p>
-            <fieldset style="margin-top:18px"><legend>Meine Reaktion als ${identity}</legend>
-                <div class="choice-pills">
-                    <label class="choice-pill"><input type="radio" name="shared-plan-reaction" value="HEART"><span>❤️ Passt mir</span></label>
-                    <label class="choice-pill"><input type="radio" name="shared-plan-reaction" value="NO_TIME"><span>🥀 Keine Zeit</span></label>
-                    <label class="choice-pill"><input type="radio" name="shared-plan-reaction" value="OTHER_DATE"><span>🔁 Anderer Tag</span></label>
-                </div>
-            </fieldset>
-            <label id="shared-date-field" class="field" hidden style="margin-top:12px"><span>Vorgeschlagenes Datum</span><input id="shared-suggested-date" type="date" min="${localToday()}"></label>
-            <div id="plan-conflict" class="warning-notice" ${conflicts.length ? "" : "hidden"} style="margin-top:16px"></div>
-            <p id="plan-share-error" class="error-message" aria-live="polite"></p>
-            <div class="action-row" style="margin-top:18px">
-                <button id="save-shared-plan" class="primary-button" type="button">Lokal speichern</button>
-                <button id="respond-shared-plan" class="secondary-button" type="button">Reaktionslink teilen</button>
-                <button class="text-button" type="button" data-route="home">Abbrechen</button>
-            </div>
-            <div id="plan-conflict-actions" class="action-row" hidden style="margin-top:12px">
-                <button id="keep-local-plan" class="secondary-button" type="button">Vorhandene Version behalten</button>
-                <button id="use-shared-plan" class="danger-button" type="button">Geteilte Version verwenden</button>
-            </div>
+            <p class="meta">${escapeHtml(formatDate(plan.date, { weekday: "long" }))}${planTimeLabel(plan) ? ` · ${escapeHtml(planTimeLabel(plan))}` : ""}</p>
+            ${plan.description ? `<p>${escapeHtml(plan.description)}</p>` : ""}
+            <div class="action-row"><button id="save-shared-plan" class="primary-button" type="button">Im Kalender speichern</button><button class="secondary-button" type="button" data-route="home">Abbrechen</button></div>
         </section>`;
-
-    container.querySelector("#shared-by").textContent = plan.createdBy;
-    container.querySelector("#shared-content").textContent = `${plan.emoji} ${plan.activity}`;
-    container.querySelector("#shared-date").textContent = `${formatDate(plan.date, { weekday: "long" })}${plan.time ? ` · ${plan.time}` : ""}`;
-    container.querySelector("#shared-note").textContent = plan.note;
-    const conflictBox = container.querySelector("#plan-conflict");
-    if (conflicts.length) conflictBox.textContent = `Es gibt Unterschiede bei: ${conflicts.join(", ")}. Wähle beim Speichern eine Version.`;
-
-    const dateField = container.querySelector("#shared-date-field");
-    container.querySelectorAll('[name="shared-plan-reaction"]').forEach((input) => {
-        if (plan.reactions[identity]?.type === input.value) input.checked = true;
-        input.addEventListener("change", () => { dateField.hidden = input.value !== "OTHER_DATE"; });
-    });
-    if (plan.reactions[identity]?.type === "OTHER_DATE") {
-        dateField.hidden = false;
-        container.querySelector("#shared-suggested-date").value = plan.reactions[identity].suggestedDate;
-    }
-
-    function applyReaction() {
-        const selected = container.querySelector('[name="shared-plan-reaction"]:checked');
-        if (!selected) return true;
-        const suggestedDate = container.querySelector("#shared-suggested-date").value;
-        if (selected.value === "OTHER_DATE" && !isIsoDate(suggestedDate)) {
-            container.querySelector("#plan-share-error").textContent = "Bitte wähle ein gültiges vorgeschlagenes Datum.";
-            return false;
-        }
-        plan.reactions[identity] = { type: selected.value, suggestedDate: selected.value === "OTHER_DATE" ? suggestedDate : "" };
-        return true;
-    }
-
-    function save(useShared = false) {
-        if (!applyReaction()) return;
-        mergePlan(plan, useShared);
-        context.toast("Plan wird mit eurem gemeinsamen Space synchronisiert.");
-        context.clearShare();
-    }
-
     container.querySelector("#save-shared-plan").addEventListener("click", () => {
-        if (conflicts.length) {
-            container.querySelector("#plan-conflict-actions").hidden = false;
-            return;
-        }
-        save(false);
+        updateData((data) => {
+            const index = data.plans.findIndex((item) => item.id === plan.id);
+            if (index >= 0) data.plans[index] = plan;
+            else data.plans.push(plan);
+            return data;
+        });
+        context.toast("Geteilter Plan wurde gespeichert.");
+        context.clearShare();
     });
-    container.querySelector("#keep-local-plan").addEventListener("click", () => save(false));
-    container.querySelector("#use-shared-plan").addEventListener("click", () => save(true));
-    container.querySelector("#respond-shared-plan").addEventListener("click", () => {
-        if (!applyReaction()) return;
-        plan.shareMode = "response";
-        mergePlan(plan, false);
-        context.showShare("plan", plan, "Reaktion auf einen Plan", `${identity} hat auf ${plan.emoji} ${plan.activity} reagiert.`);
-    });
+}
+
+export function stopStartTimers() {
+    window.clearInterval(quoteTimer);
+    quoteTimer = null;
 }

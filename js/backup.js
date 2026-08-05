@@ -48,7 +48,7 @@ export function renderBackup(container, context) {
             <article class="module-card">
                 <h2>Gemeinsame Cloud-Daten</h2>
                 <p class="muted">Änderungen werden auf beiden Geräten synchronisiert. Das gilt auch für das Löschen.</p>
-                <div class="warning-notice">Achtung: Diese Aktion löscht Einladungen, Pläne, Tagebuch, Wünsche und tägliche Stimmungen für Yaoyu und Daria auf allen Geräten.</div>
+                <div class="warning-notice">Achtung: Diese Aktion löscht Pläne, Tagebuch, Ideen und tägliche Stimmungen für Yaoyu und Daria auf allen Geräten.</div>
                 <div class="action-row" style="margin-top:16px">
                     <button id="delete-all-data" class="danger-button" type="button">Alle gemeinsamen Daten löschen</button>
                 </div>

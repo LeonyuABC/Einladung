@@ -1,10 +1,9 @@
 import {
     applyCloudCollection,
+    cleanupNotifications,
     configureCloudStorage,
-    loadData,
-    formatDate,
     getCurrentIdentity,
-    localToday,
+    loadData,
     updateData
 } from "./storage.js";
 import {
@@ -20,12 +19,11 @@ import {
     shareUrl
 } from "./share.js";
 import { hasIdentity, initializeIdentity, showApp, showIdentitySelection, updateIdentityLabel } from "./identity.js";
-import { renderInvitations, renderInvitationShare } from "./invitation.js";
-import { renderCalendar, renderPlanShare } from "./calendar.js";
+import { renderInvitationShare } from "./invitation.js";
+import { renderPlanShare, renderStart, stopStartTimers } from "./calendar.js";
 import { renderDiary, renderDiaryShare } from "./diary.js";
-import { renderWishlist, renderWishlistShare } from "./wishlist.js";
+import { renderIdeaShare, renderIdeas } from "./ideas.js";
 import { renderBackup } from "./backup.js";
-import { renderHomeMoods, renderMood } from "./mood.js";
 
 const main = document.querySelector("#main-content");
 const toastElement = document.querySelector("#toast");
@@ -40,18 +38,26 @@ const notificationPanel = document.querySelector("#notification-panel");
 const notificationList = document.querySelector("#notification-list");
 const notificationEmpty = document.querySelector("#notification-empty");
 const markNotificationsReadButton = document.querySelector("#mark-notifications-read");
-const validRoutes = new Set(["home", "mood", "invitations", "calendar", "diary", "wishlist", "settings"]);
+const validRoutes = new Set(["home", "diary", "ideas", "settings"]);
+const legacyRoutes = new Map([
+    ["mood", "home"],
+    ["calendar", "home"],
+    ["invitations", "ideas"],
+    ["wishlist", "ideas"]
+]);
 
 let toastTimer = null;
 let shareRequest = null;
 let shareError = null;
 const prefills = new Map();
+let cleanupQueued = false;
 
 function ownNotifications() {
     const identity = getCurrentIdentity();
     return (loadData().notifications || [])
         .filter((item) => item?.recipient === identity && typeof item.message === "string")
-        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+        .slice(0, 20);
 }
 
 function notificationTime(value) {
@@ -87,7 +93,7 @@ function renderNotificationCenter() {
     notificationEmpty.hidden = notifications.length !== 0;
     notificationList.replaceChildren();
 
-    notifications.slice(0, 20).forEach((notification) => {
+    notifications.forEach((notification) => {
         const button = document.createElement("button");
         button.type = "button";
         button.className = `notification-item${notification.read ? "" : " unread"}`;
@@ -100,8 +106,7 @@ function renderNotificationCenter() {
         button.append(message, time);
         button.addEventListener("click", () => {
             if (!notification.read) setNotificationRead(notification.id);
-            notificationPanel.hidden = true;
-            notificationButton.setAttribute("aria-expanded", "false");
+            closeNotificationPanel();
             navigate(notification.route || "home");
         });
         notificationList.append(button);
@@ -126,9 +131,13 @@ function toast(message) {
     toastTimer = window.setTimeout(() => toastElement.classList.remove("visible"), 2800);
 }
 
-function currentRoute() {
-    const route = window.location.hash.replace(/^#/, "");
+function normalizeRoute(route) {
+    if (legacyRoutes.has(route)) return legacyRoutes.get(route);
     return validRoutes.has(route) ? route : "home";
+}
+
+function currentRoute() {
+    return normalizeRoute(window.location.hash.replace(/^#/, ""));
 }
 
 function setActiveNavigation(route) {
@@ -145,8 +154,8 @@ function consumePrefill(route) {
     return value;
 }
 
-function navigate(route, prefill = null) {
-    if (!validRoutes.has(route)) route = "home";
+function navigate(rawRoute, prefill = null) {
+    const route = normalizeRoute(rawRoute);
     if (prefill && typeof prefill === "object") prefills.set(route, prefill);
     if (shareRequest || shareError) {
         clearShareParametersFromAddressBar();
@@ -209,61 +218,9 @@ const context = {
     }
 };
 
-function renderHome() {
-    const data = loadData();
-    const identity = getCurrentIdentity();
-    const nextPlan = data.plans
-        .filter((plan) => typeof plan.date === "string" && plan.date >= localToday())
-        .sort((a, b) => a.date.localeCompare(b.date))[0];
-    const latestDiary = data.diaryEntries
-        .slice()
-        .sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
-    const acceptedWish = (value) => ["ACCEPTED", "HEART"].includes(value);
-    const matches = data.wishlistItems.filter((wish) => acceptedWish(wish.reactions?.Yaoyu) && acceptedWish(wish.reactions?.Daria)).length;
-
-    main.innerHTML = `
-        <section class="home-hero">
-            <article class="card hero-copy">
-                <p class="eyebrow">UNSER KLEINER SPACE</p>
-                <h1 id="home-greeting"></h1>
-                <p class="muted">Ein ruhiger Ort für eure Einladungen, Pläne, Erinnerungen und Wünsche.</p>
-            </article>
-            <aside class="card hero-note">
-                <div><div class="big-emoji">♡</div><h2>Yaoyu &amp; Daria</h2><p class="muted">Zwei Geräte, ein gemeinsamer Raum.</p></div>
-            </aside>
-        </section>
-        <section class="home-mood-section">
-            <div class="section-heading">
-                <div><p class="eyebrow">HEUTE</p><h2>Wie geht es euch?</h2></div>
-                <button class="primary-button" type="button" data-route="mood">Stimmung auswählen</button>
-            </div>
-            <div id="home-mood-grid" class="mood-person-grid"></div>
-        </section>
-        <section class="module-grid" aria-label="Bereiche">
-            <button class="module-link" type="button" data-route="invitations"><span class="emoji">💌</span><strong>Einladung</strong></button>
-            <button class="module-link" type="button" data-route="calendar"><span class="emoji">📅</span><strong>Planungszentrum</strong></button>
-            <button class="module-link" type="button" data-route="diary"><span class="emoji">📖</span><strong>Aktivitätstagebuch</strong></button>
-            <button class="module-link" type="button" data-route="wishlist"><span class="emoji">✨</span><strong>Wunschliste</strong></button>
-        </section>
-        <section>
-            <div class="section-heading"><h2>Auf einen Blick</h2><button class="text-button" type="button" data-route="settings">⚙️ Einstellungen &amp; Backup</button></div>
-            <div class="summary-grid">
-                <article class="summary-card"><p class="eyebrow">NÄCHSTER PLAN</p><h3 id="home-next-plan"></h3><p id="home-next-plan-meta" class="meta"></p></article>
-                <article class="summary-card"><p class="eyebrow">LETZTE ERINNERUNG</p><h3 id="home-diary"></h3><p id="home-diary-meta" class="meta"></p></article>
-                <article class="summary-card"><p class="eyebrow">PERFECT MATCHES</p><h3 id="home-matches"></h3><p class="meta">Wünsche, die ihr beide mögt.</p></article>
-            </div>
-        </section>`;
-    main.querySelector("#home-greeting").textContent = `Hi ${identity}`;
-    main.querySelector("#home-next-plan").textContent = nextPlan ? `${nextPlan.emoji || "📅"} ${nextPlan.activity || "Gemeinsamer Plan"}` : "Noch nichts geplant";
-    main.querySelector("#home-next-plan-meta").textContent = nextPlan ? formatDate(nextPlan.date, { weekday: "long" }) : "Vielleicht ist jetzt der richtige Moment.";
-    main.querySelector("#home-diary").textContent = latestDiary ? `${latestDiary.emoji || "📖"} ${latestDiary.title || "Erinnerung"}` : "Noch keine Erinnerung";
-    main.querySelector("#home-diary-meta").textContent = latestDiary ? formatDate(latestDiary.date) : "Euer erstes Kapitel wartet.";
-    main.querySelector("#home-matches").textContent = String(matches);
-    renderHomeMoods(main.querySelector("#home-mood-grid"));
-}
-
 function renderShare() {
     setActiveNavigation("");
+    stopStartTimers();
     if (shareError) {
         renderShareError();
         return;
@@ -276,7 +233,7 @@ function renderShare() {
     } else if (shareRequest.type === "diary") {
         renderDiaryShare(main, shareRequest.data, context);
     } else if (shareRequest.type === "wishlist") {
-        renderWishlistShare(main, shareRequest.data, context);
+        renderIdeaShare(main, shareRequest.data, context);
     } else {
         renderShareError();
     }
@@ -284,6 +241,7 @@ function renderShare() {
 }
 
 function renderRoute(route = currentRoute()) {
+    route = normalizeRoute(route);
     if (!hasIdentity()) {
         showIdentitySelection();
         return;
@@ -296,17 +254,18 @@ function renderRoute(route = currentRoute()) {
         return;
     }
     setActiveNavigation(route);
-    if (route === "home") renderHome();
-    if (route === "mood") renderMood(main, context);
-    if (route === "invitations") renderInvitations(main, context);
-    if (route === "calendar") renderCalendar(main, context);
+    if (route !== "home") stopStartTimers();
+    if (route === "home") renderStart(main, context);
     if (route === "diary") renderDiary(main, context);
-    if (route === "wishlist") renderWishlist(main, context);
+    if (route === "ideas") renderIdeas(main, context);
     if (route === "settings") renderBackup(main, context);
-    document.title = route === "home" ? "Couple Space" : `${route[0].toUpperCase()}${route.slice(1)} · Couple Space`;
+    const titles = { home: "Couple Space", diary: "Tagebuch · Couple Space", ideas: "Unsere Ideen · Couple Space", settings: "Einstellungen · Couple Space" };
+    document.title = titles[route] || "Couple Space";
     main.focus();
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
+
+document.querySelector("#switch-identity").addEventListener("click", () => stopStartTimers());
 
 document.addEventListener("click", (event) => {
     const routeButton = event.target.closest("[data-route]");
@@ -377,7 +336,14 @@ window.addEventListener("couple-space-sync-status", (event) => {
 });
 
 let cloudRefreshTimer = null;
-window.addEventListener("couple-space-cloud-data", () => {
+window.addEventListener("couple-space-cloud-data", (event) => {
+    if (event.detail?.collection === "notifications" && !cleanupQueued) {
+        cleanupQueued = true;
+        window.setTimeout(() => {
+            cleanupQueued = false;
+            try { cleanupNotifications(); } catch (error) { console.warn("Benachrichtigungen konnten nicht bereinigt werden.", error); }
+        }, 50);
+    }
     window.clearTimeout(cloudRefreshTimer);
     cloudRefreshTimer = window.setTimeout(() => {
         if (!hasIdentity()) return;
@@ -387,7 +353,7 @@ window.addEventListener("couple-space-cloud-data", () => {
             return;
         }
         renderRoute(currentRoute());
-    }, 120);
+    }, 140);
 });
 
 configureCloudStorage({
@@ -396,7 +362,12 @@ configureCloudStorage({
 });
 
 initializeIdentity(() => {
-    startRealtimeSync((name, items) => applyCloudCollection(name, items));
+    try {
+        startRealtimeSync((name, items) => applyCloudCollection(name, items));
+    } catch (error) {
+        console.error("Firebase-Synchronisierung konnte nicht gestartet werden.", error);
+        toast("Synchronisierung konnte nicht gestartet werden.");
+    }
     renderRoute(currentRoute());
 });
 

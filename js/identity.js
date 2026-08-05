@@ -26,6 +26,8 @@ const configWarning = document.querySelector("#firebase-config-warning");
 let authenticatedCallback = null;
 let selectedIdentity = null;
 let cloudReady = false;
+let cloudInitializationPromise = null;
+let cloudInitializationError = null;
 
 function applyIdentityTheme(identity = null) {
     const theme = identity === "Yaoyu" ? "blue" : "pink";
@@ -45,7 +47,7 @@ function resetSelection() {
     identityOptions.hidden = false;
     pinInput.value = "";
     loginError.textContent = "";
-    identityButtons.forEach((button) => { button.disabled = !cloudReady; });
+    identityButtons.forEach((button) => { button.disabled = false; });
 }
 
 export function showIdentitySelection() {
@@ -64,7 +66,7 @@ export function showApp() {
 }
 
 function chooseIdentity(identity) {
-    if (!cloudReady || !CONFIG.users?.[identity]) return;
+    if (!CONFIG.users?.[identity]) return;
     selectedIdentity = identity;
     identityOptions.hidden = true;
     pinForm.hidden = false;
@@ -96,6 +98,20 @@ async function submitPin(event) {
             pinInput.select();
             return;
         }
+        if (cloudInitializationPromise) {
+            loginStatus.hidden = false;
+            loginStatus.textContent = "Gemeinsamer Raum wird verbunden ...";
+            try {
+                await cloudInitializationPromise;
+            } catch (error) {
+                loginError.textContent = friendlyConnectionError(error);
+                return;
+            }
+        }
+        if (cloudInitializationError || !cloudReady) {
+            loginError.textContent = friendlyConnectionError(cloudInitializationError);
+            return;
+        }
         setCurrentIdentity(selectedIdentity);
         showApp();
         authenticatedCallback?.(selectedIdentity);
@@ -111,7 +127,7 @@ export async function initializeIdentity(onAuthenticated) {
     // wird zurückgesetzt.
     clearCurrentIdentity();
     identityButtons.forEach((button) => {
-        button.disabled = true;
+        button.disabled = false;
         button.addEventListener("click", () => chooseIdentity(button.dataset.identity));
     });
     pinForm.addEventListener("submit", submitPin);
@@ -128,19 +144,28 @@ export async function initializeIdentity(onAuthenticated) {
         return;
     }
 
+    loginStatus.hidden = false;
     loginStatus.textContent = "Gemeinsamer Raum wird verbunden ...";
-    try {
-        await initializeCloud();
-        await ensureAnonymousUser();
-        cloudReady = true;
-        loginStatus.textContent = "Bereit – wähle deine Person.";
-        identityButtons.forEach((button) => { button.disabled = false; });
+    cloudInitializationPromise = (async () => {
+        try {
+            await initializeCloud();
+            await ensureAnonymousUser();
+            cloudReady = true;
+            cloudInitializationError = null;
+            loginStatus.textContent = "Bereit – wähle deine Person.";
+        } catch (error) {
+            cloudReady = false;
+            cloudInitializationError = error;
+            console.error("Firebase konnte nicht initialisiert werden.", error);
+            loginStatus.textContent = "";
+            loginError.textContent = friendlyConnectionError(error);
+            throw error;
+        }
+    })();
 
-    } catch (error) {
-        console.error("Firebase konnte nicht initialisiert werden.", error);
-        loginStatus.textContent = "";
-        loginError.textContent = friendlyConnectionError(error);
-    }
+    // Die Personenauswahl bleibt sofort bedienbar. Beim Absenden der PIN wird
+    // nötigenfalls kurz auf Firebase gewartet.
+    cloudInitializationPromise.catch(() => {});
 }
 
 export function hasIdentity() {
