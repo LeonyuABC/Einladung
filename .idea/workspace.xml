@@ -4,17 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="600d1489-51f8-4d7f-bdb9-df4f1708572a" name="Changes" comment="Version 5_Rot_Eriennern">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/js/app.js" beforeDir="false" afterPath="$PROJECT_DIR$/js/app.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/js/cloud.js" beforeDir="false" afterPath="$PROJECT_DIR$/js/cloud.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/js/invitation.js" beforeDir="false" afterPath="$PROJECT_DIR$/js/invitation.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/js/mood.js" beforeDir="false" afterPath="$PROJECT_DIR$/js/mood.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/js/storage.js" beforeDir="false" afterPath="$PROJECT_DIR$/js/storage.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/js/wishlist.js" beforeDir="false" afterPath="$PROJECT_DIR$/js/wishlist.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/style.css" beforeDir="false" afterPath="$PROJECT_DIR$/style.css" afterDir="false" />
-    </list>
+    <list default="true" id="600d1489-51f8-4d7f-bdb9-df4f1708572a" name="Changes" comment="Version 6_neue_Plannungsystem" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -168,7 +158,15 @@
       <option name="project" value="LOCAL" />
       <updated>1784646099654</updated>
     </task>
-    <option name="localTasksCounter" value="11" />
+    <task id="LOCAL-00011" summary="Version 6_neue_Plannungsystem">
+      <option name="closed" value="true" />
+      <created>1784839022827</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1784839022827</updated>
+    </task>
+    <option name="localTasksCounter" value="12" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -177,6 +175,7 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Version 4" />
     <MESSAGE value="Version 5_Rot_Eriennern" />
-    <option name="LAST_COMMIT_MESSAGE" value="Version 5_Rot_Eriennern" />
+    <MESSAGE value="Version 6_neue_Plannungsystem" />
+    <option name="LAST_COMMIT_MESSAGE" value="Version 6_neue_Plannungsystem" />
   </component>
 </project>
