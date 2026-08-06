@@ -1,4 +1,4 @@
-const VERSION = "couple-space-2026-08-05-login-fix";
+const VERSION = "couple-space-2026-08-06-responsive-mood";
 
 self.addEventListener("install", (event) => {
     event.waitUntil(self.skipWaiting());
