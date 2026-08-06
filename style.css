@@ -169,6 +169,14 @@ summary:focus-visible {
     text-align: center;
 }
 
+.identity-logo {
+    display: block;
+    width: min(360px, 88%);
+    height: auto;
+    margin: -12px auto 20px;
+    object-fit: contain;
+}
+
 .eyebrow {
     margin: 0 0 12px;
     color: var(--eyebrow);
@@ -3099,5 +3107,13 @@ details.entry-details > summary::-webkit-details-marker {
 
     .combined-calendar-event-row {
         min-height: 21px;
+    }
+}
+
+@media (max-width: 520px) {
+    .identity-logo {
+        width: min(310px, 94%);
+        margin-top: -8px;
+        margin-bottom: 16px;
     }
 }
