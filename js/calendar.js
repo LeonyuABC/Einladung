@@ -410,8 +410,19 @@ function renderCalendarGrid(container, data, context, rerender) {
             const first = events[0];
             eventRow.classList.add(first.kind === "plan" ? "event-plan" : "event-idea");
             const summary = document.createElement("span");
-            summary.textContent = `${first.emoji} ${first.time ? `${first.time} ` : ""}${first.title}`;
+            summary.className = "combined-calendar-event-summary";
+
+            const emoji = document.createElement("span");
+            emoji.className = "combined-calendar-event-emoji";
+            emoji.textContent = first.emoji || (first.kind === "plan" ? "📅" : "💡");
+
+            const text = document.createElement("span");
+            text.className = "combined-calendar-event-text";
+            text.textContent = `${first.time ? `${first.time} ` : ""}${first.title}`;
+
+            summary.append(emoji, text);
             eventRow.append(summary);
+            eventRow.setAttribute("aria-label", `${first.kind === "plan" ? "Plan" : "Idee"}: ${text.textContent}`);
             if (events.length > 1) {
                 const more = document.createElement("b");
                 more.textContent = `+${events.length - 1}`;

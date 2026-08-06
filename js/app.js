@@ -20,7 +20,7 @@ import {
 } from "./share.js";
 import { hasIdentity, initializeIdentity, showApp, showIdentitySelection, updateIdentityLabel } from "./identity.js";
 import { renderInvitationShare } from "./invitation.js";
-import { renderPlanShare, renderStart, stopStartTimers } from "./calendar.js";
+import { renderPlanShare, renderStart, stopStartTimers } from "./calendar.js?v=20260806-calendar-mobile";
 import { renderDiary, renderDiaryShare } from "./diary.js";
 import { renderIdeaShare, renderIdeas } from "./ideas.js";
 import { renderBackup } from "./backup.js";
