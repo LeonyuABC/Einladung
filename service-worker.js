@@ -1,4 +1,4 @@
-const VERSION = "couple-space-2026-08-06-logo-quotes-140";
+const VERSION = "couple-space-2026-08-07-random-quotes";
 
 self.addEventListener("install", (event) => {
     event.waitUntil(self.skipWaiting());

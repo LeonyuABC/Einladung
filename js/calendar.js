@@ -10,7 +10,7 @@ import {
 } from "./storage.js";
 import { sanitizeIdea, responseShort } from "./ideas.js";
 import { moodForDate, renderMoodEditor } from "./mood.js";
-import { LOVE_QUOTES, dailyQuoteStartIndex, quoteForIdentity } from "./quotes.js";
+import { LOVE_QUOTES, quoteForIdentity } from "./quotes.js";
 
 export const PLAN_CATEGORIES = [
     "📚 Lernen",
@@ -85,7 +85,9 @@ function renderQuoteCard(container) {
     const identity = getCurrentIdentity();
     const today = localToday();
     const shuffled = seededShuffle(LOVE_QUOTES, `${today}-${identity}`);
-    let index = dailyQuoteStartIndex(new Date()) % shuffled.length;
+    // Pick a fresh position whenever the quote card is opened/rendered so the
+    // full collection is reachable instead of always starting at today's slot.
+    let index = Math.floor(Math.random() * shuffled.length);
     const card = container.querySelector("#love-quote-card");
     const zh = card.querySelector("#quote-zh");
     const uk = card.querySelector("#quote-uk");
